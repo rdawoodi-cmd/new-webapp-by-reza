@@ -1,0 +1,6 @@
+{
+  "name": "Classroom Manager - سامانه مدیریت کلاس",
+  "description": "سیستم جامع و کاربردی مدیریت کلاس درس، حضور و غیاب، نمرات، رفتار کلاسی و کارنامه برای معلمان و اساتید با قابلیت ذخیره‌سازی محلی و اجرای آسان روی گیت‌هاب و نتلیفای",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
