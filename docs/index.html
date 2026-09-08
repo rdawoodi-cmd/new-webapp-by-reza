@@ -12,11 +12,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="./assets/index-BMIguiVF.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-5KZXI2BA.css">
+    <script type="module" crossorigin src="./assets/index.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index.css">
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased font-['Vazirmatn',sans-serif]">
     <div id="root"></div>
+    <script>
+      // Only redirect if uncompiled source HTML is being served on GitHub Pages root:
+      if (window.location.hostname.indexOf('github.io') !== -1 && !document.querySelector('script[src*="assets/index.js"]')) {
+        var base = window.location.pathname;
+        if (!base.endsWith('/')) base += '/';
+        if (base.indexOf('/docs/') === -1) {
+          window.location.replace(base + 'docs/');
+        }
+      }
+    </script>
   </body>
 </html>
 
