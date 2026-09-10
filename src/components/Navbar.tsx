@@ -6,7 +6,8 @@ import {
   Clock, 
   Calendar,
   Database,
-  Lock
+  Lock,
+  Info
 } from 'lucide-react';
 import { MainTab, AppConfig } from '../types';
 import { toPersianDigits } from '../utils/persianDate';
@@ -115,6 +116,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               {isAdminLoggedIn ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
               <span>پنل دبیر {isAdminLoggedIn && '(فعال)'}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('app-info')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'app-info'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Info className="w-4 h-4 text-indigo-600" />
+              <span>مشخصات برنامه</span>
             </button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 export type Role = 'student' | 'admin';
 
-export type MainTab = 'student-attendance' | 'student-assignments' | 'admin';
+export type MainTab = 'student-attendance' | 'student-assignments' | 'admin' | 'app-info';
 
 export type AdminSubTab = 'attendance' | 'assignments' | 'grades' | 'students' | 'toolkit' | 'settings';
 
@@ -60,3 +60,54 @@ export interface AppConfig {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
 }
+
+export interface QuizQuestion {
+  id: string;
+  questionText: string;
+  options: [string, string, string, string]; // ۴ گزینه تستی
+  correctOptionIndex: number; // ۰، ۱، ۲ یا ۳
+  explanation?: string;
+}
+
+export interface ExamSubmission {
+  id: string;
+  examId: string;
+  studentName: string;
+  className: string;
+  submittedAt: string;
+  timeSpentSeconds?: number;
+  // برای آزمون تشریحی:
+  photoAnswer?: string; // تصویر برگه دست‌نویس دانش‌آموز (Data URL)
+  photoAnswerName?: string;
+  teacherScore?: string;
+  teacherFeedback?: string;
+  // برای آزمون تستی چند گزینه‌ای:
+  selectedOptions?: Record<string, number>; // questionId -> selectedIndex
+  scorePercent?: number; // درصد نمره (۰ تا ۱۰۰)
+  correctCount?: number;
+  wrongCount?: number;
+  unansweredCount?: number;
+}
+
+export interface Exam {
+  id: string;
+  title: string;
+  type: 'descriptive' | 'multiple-choice'; // تشریحی با ارسال عکس یا تستی چند گزینه‌ای
+  className: string; // 'همه کلاس‌ها' یا کلاس مشخص
+  subject: string;
+  description: string;
+  durationMinutes: number; // تایمر زمان آزمون به دقیقه
+  isActive: boolean; // فعال بودن برای دانش‌آموزان
+  shamsiDate: string;
+  createdAt: string;
+  // فایل سوالات تشریحی (آپلود شده توسط دبیر):
+  fileName?: string;
+  fileSize?: string;
+  fileData?: string; // عکس برگه امتحانی یا PDF
+  fileType?: string;
+  // سوالات تستی:
+  questions?: QuizQuestion[];
+  // پاسخ‌های ثبت شده دانش‌آموزان:
+  submissions: Record<string, ExamSubmission>; // studentName -> ExamSubmission
+}
+

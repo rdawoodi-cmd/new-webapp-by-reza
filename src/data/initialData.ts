@@ -1,4 +1,4 @@
-import { AttendanceRecord, Assignment, StudentProfile, AppConfig } from '../types';
+import { AttendanceRecord, Assignment, StudentProfile, AppConfig, Exam } from '../types';
 import { getTodayShamsi } from '../utils/persianDate';
 
 export const DEFAULT_CLASSES = [
@@ -153,3 +153,71 @@ export function getInitialAssignments(): Assignment[] {
     },
   ];
 }
+
+export function getInitialExams(): Exam[] {
+  const today = getTodayShamsi();
+  return [
+    {
+      id: 'exam-1',
+      title: 'آزمون تشریحی میان‌ترم درس فرهنگ و هنر (طراحی و ترکیب‌بندی)',
+      type: 'descriptive',
+      className: 'همه کلاس‌ها',
+      subject: 'فرهنگ و هنر',
+      description: 'دانش‌آموزان عزیز، برگه سوالات زیر را مشاهده نمایید. پاسخ سوالات را روی یک برگ کاغذ با خط خوانا و طراحی دقیق انجام داده، سپس از برگه خود با دوربین گوشی یا تبلت عکس باکیفیت گرفته و همین‌جا آپلود و ارسال کنید.',
+      durationMinutes: 25,
+      isActive: true,
+      shamsiDate: today.dateString,
+      createdAt: new Date().toISOString(),
+      fileName: 'برگه_سوالات_امتحان_هنر_فصل۳.png',
+      fileSize: '145 KB',
+      // SVG data URL as question paper preview
+      fileData: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" fill="%23f8fafc"/><rect x="20" y="20" width="560" height="360" rx="12" fill="%23ffffff" stroke="%23cbd5e1" stroke-width="2"/><text x="300" y="65" font-family="sans-serif" font-size="18" font-weight="bold" fill="%231e293b" text-anchor="middle">برگه آزمون کلاسی - درس فرهنگ و هنر</text><text x="300" y="95" font-family="sans-serif" font-size="13" fill="%2364748b" text-anchor="middle">مدت زمان پاسخگویی: ۲۵ دقیقه • نمره کل: ۲۰</text><line x1="50" y1="120" x2="550" y2="120" stroke="%23e2e8f0" stroke-width="1.5"/><text x="540" y="160" font-family="sans-serif" font-size="14" font-weight="bold" fill="%23334155" text-anchor="end">سوال ۱: سه قانون اصلی در ترکیب‌بندی نقطه طلایی را شرح دهید. (۶ نمره)</text><text x="540" y="220" font-family="sans-serif" font-size="14" font-weight="bold" fill="%23334155" text-anchor="end">سوال ۲: تفاوت رنگ‌های مکمل و همجوار در چرخه رنگ ایتن چیست؟ (۷ نمره)</text><text x="540" y="280" font-family="sans-serif" font-size="14" font-weight="bold" fill="%23334155" text-anchor="end">سوال ۳: یک طرح ساده از کوزه سفالی با سایه‌روشن هاشور رسم نمایید. (۷ نمره)</text><text x="300" y="345" font-family="sans-serif" font-size="12" fill="%2394a3b8" text-anchor="middle">پاسخ‌ها را روی برگه نوشته و عکس آن را در سامانه ارسال کنید.</text></svg>',
+      fileType: 'image/svg+xml',
+      submissions: {},
+    },
+    {
+      id: 'exam-2',
+      title: 'آزمون تستی چند گزینه‌ای مفاهیم و عناصر بصری',
+      type: 'multiple-choice',
+      className: 'همه کلاس‌ها',
+      subject: 'فرهنگ و هنر',
+      description: 'به ۴ سوال تستی زیر در مدت زمان مشخص پاسخ دهید. به محض پایان آزمون، نمره و درصد شما به صورت خودکار محاسبه و نمایش داده می‌شود.',
+      durationMinutes: 15,
+      isActive: true,
+      shamsiDate: today.dateString,
+      createdAt: new Date().toISOString(),
+      questions: [
+        {
+          id: 'q-1',
+          questionText: 'کدام گزینه از رنگ‌های اصلی (درجه اول) در دایره رنگ سنتی است؟',
+          options: ['سبز', 'نارنجی', 'زرد', 'بنفش'],
+          correctOptionIndex: 2, // زرد
+          explanation: 'رنگ‌های اصلی شامل قرمز، آبی و زرد هستند.'
+        },
+        {
+          id: 'q-2',
+          questionText: 'ایجاد احساس عمق و فاصله در نقاشی با کدام عنصر بصری به دست می‌آید؟',
+          options: ['پرسپکتیو (دیدگاه)', 'فونت کتیبه', 'ضخامت کاغذ', 'قاب عکس'],
+          correctOptionIndex: 0, // پرسپکتیو
+          explanation: 'پرسپکتیو علم نمایش عمق و سه بعدی نشان دادن حجم روی سطح دو بعدی است.'
+        },
+        {
+          id: 'q-3',
+          questionText: 'رنگ مکمل رنگ آبی کدام است؟',
+          options: ['سبز', 'نارنجی', 'زرد', 'قرمز'],
+          correctOptionIndex: 1, // نارنجی
+          explanation: 'در چرخه رنگ ایتن، نارنجی روبروی آبی و مکمل آن است.'
+        },
+        {
+          id: 'q-4',
+          questionText: 'کدام خط، احساس آرامش و سکون را در یک اثر هنری به بیننده القا می‌کند؟',
+          options: ['خط شکسته و زاویه‌دار', 'خط افقی', 'خط منحنی تند', 'خط مورب متمایل'],
+          correctOptionIndex: 1, // خط افقی
+          explanation: 'خطوط افقی یادآور خط افق طبیعت بوده و حس سکون و آرامش ایجاد می‌کنند.'
+        }
+      ],
+      submissions: {},
+    }
+  ];
+}
+

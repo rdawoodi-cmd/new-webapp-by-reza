@@ -1,14 +1,15 @@
-import { AttendanceRecord, Assignment, StudentProfile, AppConfig } from '../types';
-import { getInitialConfig, getInitialStudents, getInitialAttendance, getInitialAssignments } from '../data/initialData';
+import { AttendanceRecord, Assignment, StudentProfile, AppConfig, Exam } from '../types';
+import { getInitialConfig, getInitialStudents, getInitialAttendance, getInitialAssignments, getInitialExams } from '../data/initialData';
 
 export interface FullAppState {
   config: AppConfig;
   students: StudentProfile[];
   attendance: AttendanceRecord[];
   assignments: Assignment[];
+  exams: Exam[];
 }
 
-const STORAGE_KEY = 'smart_school_manager_v2_9';
+const STORAGE_KEY = 'smart_school_manager_v3_6';
 
 export function loadLocalState(): FullAppState {
   try {
@@ -19,6 +20,7 @@ export function loadLocalState(): FullAppState {
         students: getInitialStudents(),
         attendance: getInitialAttendance(),
         assignments: getInitialAssignments(),
+        exams: getInitialExams(),
       };
     }
     const parsed = JSON.parse(raw);
@@ -27,6 +29,7 @@ export function loadLocalState(): FullAppState {
       students: parsed.students || getInitialStudents(),
       attendance: parsed.attendance || getInitialAttendance(),
       assignments: parsed.assignments || getInitialAssignments(),
+      exams: parsed.exams && parsed.exams.length > 0 ? parsed.exams : getInitialExams(),
     };
   } catch (err) {
     console.error('Error loading state from localStorage:', err);
@@ -35,6 +38,7 @@ export function loadLocalState(): FullAppState {
       students: getInitialStudents(),
       attendance: getInitialAttendance(),
       assignments: getInitialAssignments(),
+      exams: getInitialExams(),
     };
   }
 }

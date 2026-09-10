@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
   Lock, 
@@ -31,7 +31,8 @@ import {
   Globe,
   HardDrive,
   GitBranch,
-  ExternalLink
+  ExternalLink,
+  FileQuestion
 } from 'lucide-react';
 import { 
   AttendanceRecord, 
@@ -39,19 +40,22 @@ import {
   StudentProfile, 
   AppConfig, 
   AdminSubTab, 
-  GradeEntry 
+  GradeEntry,
+  Exam
 } from '../types';
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
 import { exportAttendanceToCSV, exportGradesToCSV, exportBackupJSON } from '../utils/storage';
 import { sounds } from '../utils/sound';
 import { APP_VERSION, APP_VERSION_FA, APP_BUILD_DATE_FA, APP_BUILD_NOTES } from '../version';
 import confetti from 'canvas-confetti';
+import { ExamManager } from './ExamManager';
 
 interface AdminPanelProps {
   config: AppConfig;
   attendance: AttendanceRecord[];
   assignments: Assignment[];
   students: StudentProfile[];
+  exams?: Exam[];
   isAdminLoggedIn: boolean;
   onLogin: (pin: string) => boolean;
   onLogout: () => void;
@@ -66,6 +70,10 @@ interface AdminPanelProps {
   onAddStudent: (name: string, className: string, code?: string) => void;
   onDeleteStudent: (id: string) => void;
   onRestoreBackup: (jsonData: any) => void;
+  onCreateExam?: (exam: Omit<Exam, 'id' | 'createdAt' | 'submissions'>) => void;
+  onUpdateExam?: (exam: Exam) => void;
+  onDeleteExam?: (id: string) => void;
+  onGradeSubmission?: (examId: string, studentName: string, teacherScore: string, teacherFeedback: string) => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -87,6 +95,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onAddStudent,
   onDeleteStudent,
   onRestoreBackup,
+  exams = [],
+  onCreateExam,
+  onUpdateExam,
+  onDeleteExam,
+  onGradeSubmission,
 }) => {
   // Login State
   const [pinInput, setPinInput] = useState('');
@@ -95,6 +108,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Sub Tab
   const [subTab, setSubTab] = useState<AdminSubTab>('attendance');
+
+  // Active Subject Selection for Teacher Desk (انتخاب درس در حال مدیریت دبیر)
+  const [activeSubject, setActiveSubject] = useState<string>(() => {
+    const saved = localStorage.getItem('teacher_active_subject');
+    if (saved && (saved === 'all' || config.subjects.includes(saved))) return saved;
+    return config.subjects[0] || 'فرهنگ و هنر';
+  });
+
+  const handleSelectActiveSubject = (subj: string) => {
+    setActiveSubject(subj);
+    localStorage.setItem('teacher_active_subject', subj);
+    if (subj !== 'all') {
+      setAssSubject(subj);
+    }
+  };
 
   // Attendance Sub-Tab States
   const [attSearch, setAttSearch] = useState('');
@@ -108,6 +136,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [assDesc, setAssDesc] = useState('');
   const [assGradingType, setAssGradingType] = useState<'numeric' | 'qualitative'>('numeric');
   const [assFile, setAssFile] = useState<{ name: string; size: string; type: string; data: string } | null>(null);
+  const [assignmentNotice, setAssignmentNotice] = useState<{
+    type: 'success' | 'info';
+    title: string;
+    desc: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Grading Tab States
   const [selectedAssId, setSelectedAssId] = useState<string>(assignments[0]?.id || '');
@@ -264,13 +298,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (!assTitle.trim()) return;
 
     const today = getTodayShamsi();
+    const savedTitle = assTitle.trim();
+    const savedClass = assClass;
 
     if (editAssId) {
       const existing = assignments.find((a) => a.id === editAssId);
       if (existing) {
         onUpdateAssignment({
           ...existing,
-          title: assTitle.trim(),
+          title: savedTitle,
           className: assClass,
           subject: assSubject,
           description: assDesc.trim(),
@@ -282,9 +318,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         });
       }
       setEditAssId(null);
+      setAssignmentNotice({
+        type: 'success',
+        title: 'تغییرات تکلیف با موفقیت ذخیره شد',
+        desc: `تکلیف «${savedTitle}» با موفقیت به‌روزرسانی و ذخیره گردید.`
+      });
     } else {
       onCreateAssignment({
-        title: assTitle.trim(),
+        title: savedTitle,
         className: assClass,
         subject: assSubject,
         description: assDesc.trim(),
@@ -296,11 +337,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         fileData: assFile?.data,
         fileType: assFile?.type,
       });
+      setAssignmentNotice({
+        type: 'success',
+        title: 'تکلیف با موفقیت ارسال و منتشر شد!',
+        desc: `تکلیف «${savedTitle}» برای کلاس (${savedClass}) ثبت گردید و اکنون دانش‌آموزان می‌توانند آن را در تب تکالیف مشاهده کنند.`
+      });
+      try {
+        confetti({
+          particleCount: 35,
+          spread: 60,
+          origin: { y: 0.6 }
+        });
+      } catch (err) {}
     }
 
     setAssTitle('');
     setAssDesc('');
     setAssFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    // Auto-dismiss notice after 8 seconds
+    setTimeout(() => {
+      setAssignmentNotice((curr) => (curr?.title.includes(savedTitle) ? null : curr));
+    }, 8000);
   };
 
   const startEditAss = (ass: Assignment) => {
@@ -475,6 +536,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
+        {/* بخش ویژه: انتخاب درس در حال مدیریت دبیر (برای دبیرانی که چند درس تدریس می‌کنند) */}
+        <div className="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-slate-50 border border-blue-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black text-slate-800">درس در حال مدیریت دبیر:</span>
+                <span className="text-xs font-extrabold text-blue-800 bg-blue-100/90 border border-blue-200 px-2 py-0.5 rounded-lg">
+                  {activeSubject === 'all' ? 'همه دروس' : `درس ${activeSubject}`}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                اگر دبیر چند درس مختلف هستید، ابتدا درس مورد نظر را مشخص کنید تا فرم‌ها و آزمون‌ها برای آن تنظیم شوند.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => handleSelectActiveSubject('all')}
+              className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                activeSubject === 'all'
+                  ? 'bg-slate-800 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-2xs'
+              }`}
+            >
+              همه دروس
+            </button>
+            {config.subjects.map((subj) => (
+              <button
+                key={subj}
+                type="button"
+                onClick={() => handleSelectActiveSubject(subj)}
+                className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+                  activeSubject === subj
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 shadow-2xs'
+                }`}
+              >
+                {subj}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* ساب‌تب‌های پنل مدیریت */}
         <div className="flex items-center gap-1.5 overflow-x-auto pt-3 scrollbar-none">
           {[
@@ -482,7 +591,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             { id: 'assignments', label: 'تکالیف', icon: <BookOpen className="w-4 h-4" /> },
             { id: 'grades', label: 'نمرات و بازخورد', icon: <PenTool className="w-4 h-4" /> },
             { id: 'students', label: 'لیست دانش‌آموزان', icon: <Users className="w-4 h-4" /> },
-            { id: 'toolkit', label: 'جعبه ابزار کلاسی', icon: <Wrench className="w-4 h-4" /> },
+            { id: 'toolkit', label: 'آزمون‌ساز کلاسی', icon: <FileQuestion className="w-4 h-4" /> },
             { id: 'settings', label: 'تنظیمات و استقرار', icon: <SettingsIcon className="w-4 h-4" /> },
           ].map((tab) => (
             <button
@@ -664,6 +773,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <span>{editAssId ? 'ویرایش تکلیف' : 'ارسال تکلیف جدید'}</span>
             </h3>
 
+            {/* پیام موفقیت‌آمیز ارسال تکلیف */}
+            {assignmentNotice && (
+              <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3.5 rounded-xl flex items-start justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-1">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-emerald-950 leading-snug">{assignmentNotice.title}</p>
+                    <p className="text-[11px] text-emerald-800 mt-1 leading-relaxed">{assignmentNotice.desc}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAssignmentNotice(null)}
+                  className="text-emerald-700 hover:text-emerald-900 p-1 rounded-md text-xs cursor-pointer shrink-0"
+                  title="بستن پیام"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <form onSubmit={handleSaveAssignment} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">عنوان تکلیف / تمرین:</label>
@@ -737,6 +869,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">فایل پیوست (اختیاری):</label>
                 <input
                   type="file"
+                  ref={fileInputRef}
                   onChange={handleFileChange}
                   className="w-full text-xs px-2 py-1.5 border border-slate-200 rounded-xl bg-slate-50 file:mr-0 file:ml-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                 />
@@ -775,17 +908,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* لیست تکالیف موجود */}
           <div className="lg:col-span-2 space-y-3">
-            <h3 className="text-sm font-extrabold text-slate-800 flex items-center justify-between">
-              <span>تکالیف منتشر شده ({toPersianDigits(assignments.length)})</span>
-            </h3>
+            {(() => {
+              const displayedAssignments = assignments.filter((item) => {
+                if (activeSubject !== 'all' && item.subject !== activeSubject) return false;
+                return true;
+              });
 
-            {assignments.length === 0 ? (
-              <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
-                تکلیفی ثبت نشده است. از فرم روبرو تکلیف جدیدی تعریف کنید.
-              </div>
-            ) : (
-              assignments.map((item) => (
-                <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+              return (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-extrabold text-slate-800">
+                      <span>تکالیف منتشر شده {activeSubject !== 'all' ? `(درس ${activeSubject})` : ''} ({toPersianDigits(displayedAssignments.length)})</span>
+                    </h3>
+                    {activeSubject !== 'all' && (
+                      <button
+                        type="button"
+                        onClick={() => handleSelectActiveSubject('all')}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline cursor-pointer"
+                      >
+                        نمایش تمام دروس
+                      </button>
+                    )}
+                  </div>
+
+                  {displayedAssignments.length === 0 ? (
+                    <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
+                      {activeSubject !== 'all'
+                        ? `تکلیفی برای درس «${activeSubject}» ثبت نشده است. از فرم روبرو برای این درس تکلیف تعریف کنید.`
+                        : 'تکلیفی ثبت نشده است. از فرم روبرو تکلیف جدیدی تعریف کنید.'}
+                    </div>
+                  ) : (
+                    displayedAssignments.map((item) => (
+                      <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -859,6 +1013,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               ))
             )}
+          </>
+        );
+      })()}
           </div>
         </div>
       )}
@@ -1287,134 +1444,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       )}
 
-      {/* ۵. تب جعبه ابزار کلاسی */}
+      {/* ۵. تب آزمون‌ساز کلاسی و کوئیز آنلاین */}
       {subTab === 'toolkit' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* ابزار ۱: قرعه‌کشی اسامی برای پرسش کلاسی */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-center">
-            <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mx-auto">
-              <Dices className="w-6 h-6" />
-            </div>
-
-            <div>
-              <h3 className="text-base font-extrabold text-slate-800">گردونه شانس و انتخاب تصادفی</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                انتخاب تصادفی و عادلانه دانش‌آموز برای پاسخگویی پای تخته یا حل تمرین
-              </p>
-            </div>
-
-            <div className="max-w-xs mx-auto">
-              <label className="block text-xs font-bold text-slate-700 mb-1 text-right">انتخاب کلاس:</label>
-              <select
-                value={pickerClass}
-                onChange={(e) => {
-                  setPickerClass(e.target.value);
-                  setPickedStudent(null);
-                }}
-                className="w-full text-xs font-bold px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white cursor-pointer"
-              >
-                {config.classes.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* کارت نمایش نام انتخاب شده */}
-            <div className="py-6 px-4 rounded-2xl bg-gradient-to-b from-purple-50 to-white border border-purple-100 min-h-[120px] flex flex-col items-center justify-center">
-              {pickedStudent ? (
-                <div className="animate-in zoom-in duration-200">
-                  <span className="text-[11px] text-purple-600 font-bold uppercase tracking-wider block mb-1">
-                    دانش‌آموز منتخب:
-                  </span>
-                  <h4 className="text-xl sm:text-2xl font-black text-slate-900">{pickedStudent.name}</h4>
-                  <p className="text-xs text-slate-400 mt-1">کلاس {pickedStudent.className}</p>
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400">کلید قرعه‌کشی را فشار دهید...</p>
-              )}
-            </div>
-
-            <button
-              onClick={handlePickRandomStudent}
-              disabled={isPicking}
-              className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Dices className="w-4 h-4" />
-              <span>{isPicking ? 'در حال چرخش نام‌ها...' : 'شروع قرعه‌کشی تصادفی'}</span>
-            </button>
-          </div>
-
-          {/* ابزار ۲: تایمر کلاسی و آزمون */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-center">
-            <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto">
-              <Timer className="w-6 h-6" />
-            </div>
-
-            <div>
-              <h3 className="text-base font-extrabold text-slate-800">تایمر هوشمند معکوس کلاسی</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                زمان‌سنج مناسب کوئیزهای کلاسی، مسابقات گروهی و زمان استراحت
-              </p>
-            </div>
-
-            {/* نمایش زمان */}
-            <div className="py-4">
-              <div className="text-4xl sm:text-5xl font-mono font-black text-slate-800 tracking-tight">
-                {toPersianDigits(
-                  `${Math.floor(timerSecondsLeft / 60)
-                    .toString()
-                    .padStart(2, '0')}:${(timerSecondsLeft % 60).toString().padStart(2, '0')}`
-                )}
-              </div>
-            </div>
-
-            {/* کلیدهای سریع انتخاب زمان */}
-            <div className="flex items-center justify-center gap-1.5 flex-wrap">
-              {[3, 5, 10, 15, 20, 30].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => {
-                    setIsTimerRunning(false);
-                    setTimerMinutes(m);
-                    setTimerSecondsLeft(m * 60);
-                  }}
-                  className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition-colors cursor-pointer ${
-                    timerMinutes === m
-                      ? 'bg-amber-500 text-white border-amber-600'
-                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'
-                  }`}
-                >
-                  {toPersianDigits(m)} دقیقه
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                onClick={() => setIsTimerRunning(!isTimerRunning)}
-                className={`flex-1 py-2.5 rounded-xl font-bold text-xs text-white flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer ${
-                  isTimerRunning ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
-                }`}
-              >
-                {isTimerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                <span>{isTimerRunning ? 'توقف موقت' : 'شروع زمان'}</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setIsTimerRunning(false);
-                  setTimerSecondsLeft(timerMinutes * 60);
-                }}
-                className="p-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 cursor-pointer"
-                title="شروع مجدد"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
+        <ExamManager
+          config={config}
+          exams={exams}
+          activeSubject={activeSubject}
+          onCreateExam={onCreateExam || (() => {})}
+          onUpdateExam={onUpdateExam || (() => {})}
+          onDeleteExam={onDeleteExam || (() => {})}
+          onGradeSubmission={onGradeSubmission || (() => {})}
+        />
       )}
 
       {/* ۶. تب تنظیمات و راهنمای استقرار روی GitHub / Netlify */}
@@ -1612,7 +1652,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
-                onClick={() => exportBackupJSON({ config, students, attendance, assignments })}
+                onClick={() => exportBackupJSON({ config, students, attendance, assignments, exams })}
                 className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4" />

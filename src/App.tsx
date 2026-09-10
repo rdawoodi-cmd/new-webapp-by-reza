@@ -3,13 +3,16 @@ import { Navbar } from './components/Navbar';
 import { StudentAttendanceView } from './components/StudentAttendanceView';
 import { StudentAssignmentsView } from './components/StudentAssignmentsView';
 import { AdminPanel } from './components/AdminPanel';
+import { AppInfoView } from './components/AppInfoView';
 import { 
   MainTab, 
   AppConfig, 
   AttendanceRecord, 
   Assignment, 
   StudentProfile, 
-  GradeEntry 
+  GradeEntry,
+  Exam,
+  ExamSubmission
 } from './types';
 import { loadLocalState, saveLocalState, FullAppState } from './utils/storage';
 import { getTodayShamsi, getCurrentTimeString, toPersianDigits } from './utils/persianDate';
@@ -216,6 +219,80 @@ export default function App() {
     }));
   };
 
+  // Exam Handlers
+  const handleCreateExam = (
+    examData: Omit<Exam, 'id' | 'createdAt' | 'submissions'>
+  ) => {
+    const newExam: Exam = {
+      ...examData,
+      id: `ex-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      createdAt: new Date().toISOString(),
+      submissions: {},
+    };
+
+    setAppState((prev) => ({
+      ...prev,
+      exams: [newExam, ...(prev.exams || [])],
+    }));
+  };
+
+  const handleUpdateExam = (updatedExam: Exam) => {
+    setAppState((prev) => ({
+      ...prev,
+      exams: (prev.exams || []).map((e) => (e.id === updatedExam.id ? updatedExam : e)),
+    }));
+  };
+
+  const handleDeleteExam = (id: string) => {
+    setAppState((prev) => ({
+      ...prev,
+      exams: (prev.exams || []).filter((e) => e.id !== id),
+    }));
+  };
+
+  const handleGradeSubmission = (
+    examId: string,
+    studentName: string,
+    teacherScore: string,
+    teacherFeedback: string
+  ) => {
+    setAppState((prev) => ({
+      ...prev,
+      exams: (prev.exams || []).map((ex) => {
+        if (ex.id !== examId) return ex;
+        const currentSub = ex.submissions[studentName];
+        if (!currentSub) return ex;
+        return {
+          ...ex,
+          submissions: {
+            ...ex.submissions,
+            [studentName]: {
+              ...currentSub,
+              teacherScore,
+              teacherFeedback,
+            },
+          },
+        };
+      }),
+    }));
+  };
+
+  const handleSubmitExam = (examId: string, submission: ExamSubmission) => {
+    setAppState((prev) => ({
+      ...prev,
+      exams: (prev.exams || []).map((ex) => {
+        if (ex.id !== examId) return ex;
+        return {
+          ...ex,
+          submissions: {
+            ...ex.submissions,
+            [submission.studentName]: submission,
+          },
+        };
+      }),
+    }));
+  };
+
   // Config Update
   const handleUpdateConfig = (newConfig: AppConfig) => {
     setAppState((prev) => ({
@@ -232,6 +309,7 @@ export default function App() {
         students: parsed.students || [],
         attendance: parsed.attendance || [],
         assignments: parsed.assignments || [],
+        exams: parsed.exams || [],
       });
     }
   };
@@ -260,6 +338,8 @@ export default function App() {
           <StudentAssignmentsView
             config={appState.config}
             assignments={appState.assignments}
+            exams={appState.exams || []}
+            onSubmitExam={handleSubmitExam}
           />
         )}
 
@@ -269,6 +349,7 @@ export default function App() {
             attendance={appState.attendance}
             assignments={appState.assignments}
             students={appState.students}
+            exams={appState.exams || []}
             isAdminLoggedIn={isAdminLoggedIn}
             onLogin={handleLogin}
             onLogout={handleLogout}
@@ -283,6 +364,17 @@ export default function App() {
             onAddStudent={handleAddStudent}
             onDeleteStudent={handleDeleteStudent}
             onRestoreBackup={handleRestoreBackup}
+            onCreateExam={handleCreateExam}
+            onUpdateExam={handleUpdateExam}
+            onDeleteExam={handleDeleteExam}
+            onGradeSubmission={handleGradeSubmission}
+          />
+        )}
+
+        {activeTab === 'app-info' && (
+          <AppInfoView
+            config={appState.config}
+            onNavigateTab={setActiveTab}
           />
         )}
       </main>
