@@ -24,8 +24,12 @@ export function loadLocalState(): FullAppState {
       };
     }
     const parsed = JSON.parse(raw);
+    const loadedConfig = { ...getInitialConfig(), ...(parsed.config || {}) };
+    if (loadedConfig.schoolName === 'دبیرستان دوره اول نمونه دولتی شهید چمران') {
+      loadedConfig.schoolName = 'دبیرستان امام خمینی سمیرم';
+    }
     return {
-      config: { ...getInitialConfig(), ...(parsed.config || {}) },
+      config: loadedConfig,
       students: parsed.students || getInitialStudents(),
       attendance: parsed.attendance || getInitialAttendance(),
       assignments: parsed.assignments || getInitialAssignments(),

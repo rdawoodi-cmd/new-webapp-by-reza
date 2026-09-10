@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, 
   Search, 
@@ -15,35 +15,40 @@ import {
   FileQuestion,
   Smartphone
 } from 'lucide-react';
-import { Assignment, AppConfig, Exam, ExamSubmission } from '../types';
+import { Assignment, AppConfig, Exam, ExamSubmission, StudentProfile } from '../types';
 import { toPersianDigits } from '../utils/persianDate';
 import { getSavedEitaaId, saveEitaaId } from '../utils/deviceIdentifier';
 import { StudentExamsView } from './StudentExamsView';
 
 interface StudentAssignmentsViewProps {
   config: AppConfig;
+  students: StudentProfile[];
   assignments: Assignment[];
   exams?: Exam[];
   onSubmitExam?: (examId: string, submission: ExamSubmission) => void;
+  studentName: string;
+  selectedClass: string;
+  selectedSubject: string;
 }
 
 export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
   config,
+  students,
   assignments,
   exams = [],
   onSubmitExam,
+  studentName,
+  selectedClass,
+  selectedSubject,
 }) => {
-  const [selectedClass, setSelectedClass] = useState<string>(() => {
-    return localStorage.getItem('last_selected_class') || config.classes[0] || 'هفتم الف';
-  });
-  const [studentName, setStudentName] = useState<string>(() => {
-    return localStorage.getItem('last_student_name') || '';
-  });
-  const [eitaaId, setEitaaId] = useState<string>(() => {
-    return getSavedEitaaId();
-  });
   const [viewMode, setViewMode] = useState<'assignments' | 'exams'>('assignments');
-  const [filterSubject, setFilterSubject] = useState<string>('all');
+  const [filterSubject, setFilterSubject] = useState<string>(selectedSubject || 'all');
+
+  useEffect(() => {
+    if (selectedSubject) {
+      setFilterSubject(selectedSubject);
+    }
+  }, [selectedSubject]);
 
   const filteredAssignments = assignments.filter((a) => {
     const classMatch = a.className === 'همه کلاس‌ها' || a.className === selectedClass;
@@ -52,78 +57,14 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
   });
 
   const activeExamsCount = exams.filter(
-    (e) => e.isActive && (e.className === 'همه کلاس‌ها' || e.className === selectedClass)
+    (e) => e.isActive && 
+      (e.className === 'همه کلاس‌ها' || e.className === selectedClass) &&
+      (filterSubject === 'all' || e.subject === filterSubject)
   ).length;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* باکس فیلتر کلاس و نام دانش‌آموز */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-        <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
-          <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-            <BookOpen className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-base font-extrabold text-slate-800">
-              مشاهده تکالیف و کارنامه ارزشیابی
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              برای مشاهده نمرات اختصاصی و بازخورد دبیر، نام خود را در کادر زیر وارد کنید.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">کلاس شما:</label>
-            <select
-              value={selectedClass}
-              onChange={(e) => {
-                setSelectedClass(e.target.value);
-                localStorage.setItem('last_selected_class', e.target.value);
-              }}
-              className="w-full text-xs sm:text-sm font-medium px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-blue-600 transition-all cursor-pointer"
-            >
-              {config.classes.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              نام و نام خانوادگی شما:
-            </label>
-            <input
-              type="text"
-              value={studentName}
-              onChange={(e) => {
-                setStudentName(e.target.value);
-                localStorage.setItem('last_student_name', e.target.value);
-              }}
-              placeholder="مثال: علی رضایی"
-              className="w-full text-xs sm:text-sm font-bold px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white focus:outline-blue-600 transition-all"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                <span>حساب شناسایی شده در ایتا:</span>
-              </span>
-            </label>
-            <div className="w-full text-xs font-mono font-bold px-3 py-2 border border-slate-200 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-between">
-              <span dir="ltr">{eitaaId || 'شناسایی خودکار'}</span>
-              <span className="text-[10px] text-emerald-700 font-sans font-bold bg-emerald-100 px-2 py-0.5 rounded-md">
-                ✓ خودکار
-              </span>
-            </div>
-          </div>
-        </div>
-
         {/* سوییچر بین تکالیف و آزمون‌ها */}
         <div className="flex rounded-xl bg-slate-100 p-1 gap-1">
           <button
@@ -158,34 +99,32 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
           </button>
         </div>
 
-        {viewMode === 'assignments' && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pt-1 scrollbar-none">
-            <span className="text-xs text-slate-400 whitespace-nowrap pl-1">فیلتر درس:</span>
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 scrollbar-none">
+          <span className="text-xs text-slate-400 whitespace-nowrap pl-1">فیلتر درس:</span>
+          <button
+            onClick={() => setFilterSubject('all')}
+            className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+              filterSubject === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            همه دروس
+          </button>
+          {config.subjects.map((sub) => (
             <button
-              onClick={() => setFilterSubject('all')}
+              key={sub}
+              onClick={() => setFilterSubject(sub)}
               className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                filterSubject === 'all'
+                filterSubject === sub
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              همه دروس
+              {sub}
             </button>
-            {config.subjects.map((sub) => (
-              <button
-                key={sub}
-                onClick={() => setFilterSubject(sub)}
-                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                  filterSubject === sub
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {sub}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
 
       {viewMode === 'exams' ? (
@@ -193,6 +132,9 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
           config={config}
           exams={exams}
           selectedClass={selectedClass}
+          selectedSubject={selectedSubject}
+          filterSubject={filterSubject}
+          onFilterSubjectChange={setFilterSubject}
           studentName={studentName}
           onSubmitExam={onSubmitExam || (() => {})}
         />
@@ -202,7 +144,11 @@ export const StudentAssignmentsView: React.FC<StudentAssignmentsViewProps> = ({
         {filteredAssignments.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
             <BookOpen className="w-10 h-10 mx-auto text-slate-300 mb-2" />
-            <p className="font-bold text-sm text-slate-700">تکلیفی برای این کلاس ثبت نشده است.</p>
+            <p className="font-bold text-sm text-slate-700">
+              {filterSubject !== 'all' 
+                ? `تکلیفی برای درس «${filterSubject}» در این کلاس ثبت نشده است.` 
+                : 'تکلیفی برای این کلاس ثبت نشده است.'}
+            </p>
             <p className="text-xs text-slate-400 mt-1">
               به محض ثبت تمرین جدید توسط دبیر، در این بخش نمایش داده خواهد شد.
             </p>

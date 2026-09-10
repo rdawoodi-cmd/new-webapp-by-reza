@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { StudentAttendanceView } from './components/StudentAttendanceView';
-import { StudentAssignmentsView } from './components/StudentAssignmentsView';
+import { StudentPortal } from './components/StudentPortal';
 import { AdminPanel } from './components/AdminPanel';
 import { AppInfoView } from './components/AppInfoView';
 import { 
@@ -20,7 +19,7 @@ import { APP_VERSION_FA } from './version';
 
 export default function App() {
   const [appState, setAppState] = useState<FullAppState>(() => loadLocalState());
-  const [activeTab, setActiveTab] = useState<MainTab>('student-attendance');
+  const [activeTab, setActiveTab] = useState<MainTab>('student');
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return sessionStorage.getItem('is_admin_logged_in') === 'true';
   });
@@ -198,10 +197,13 @@ export default function App() {
   };
 
   // Student Roster Handlers
-  const handleAddStudent = (name: string, className: string, code?: string) => {
+  const handleAddStudent = (firstName: string, lastName: string, className: string, code?: string) => {
+    const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     const newSt: StudentProfile = {
       id: `st-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: name.trim(),
+      name: fullName || firstName.trim(), // fallback if only one name is provided (e.g. from bulk add logic changes)
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
       className,
       code: code?.trim(),
       createdAt: new Date().toISOString(),
@@ -344,19 +346,13 @@ export default function App() {
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {activeTab === 'student-attendance' && (
-          <StudentAttendanceView
+        {(activeTab as any) === 'student' && (
+          <StudentPortal
             config={appState.config}
             students={appState.students}
-            onSubmitAttendance={handleStudentAttendanceSubmit}
-          />
-        )}
-
-        {activeTab === 'student-assignments' && (
-          <StudentAssignmentsView
-            config={appState.config}
             assignments={appState.assignments}
             exams={appState.exams || []}
+            onSubmitAttendance={handleStudentAttendanceSubmit}
             onSubmitExam={handleSubmitExam}
           />
         )}

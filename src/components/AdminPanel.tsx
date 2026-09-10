@@ -71,7 +71,7 @@ interface AdminPanelProps {
   onDeleteAssignment: (id: string) => void;
   onSaveGrade: (assignmentId: string, studentName: string, grade: GradeEntry) => void;
   onBatchGrades: (assignmentId: string, grades: Record<string, GradeEntry>) => void;
-  onAddStudent: (name: string, className: string, code?: string) => void;
+  onAddStudent: (firstName: string, lastName: string, className: string, code?: string) => void;
   onDeleteStudent: (id: string) => void;
   onRestoreBackup: (jsonData: any) => void;
   onCreateExam?: (exam: Omit<Exam, 'id' | 'createdAt' | 'submissions'>) => void;
@@ -149,6 +149,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Assignment Form States
   const [editAssId, setEditAssId] = useState<string | null>(null);
+  const [deletingAss, setDeletingAss] = useState<Assignment | null>(null);
+  const [showClearAttendanceModal, setShowClearAttendanceModal] = useState(false);
   const [assTitle, setAssTitle] = useState('');
   const [assClass, setAssClass] = useState('همه کلاس‌ها');
   const [assSubject, setAssSubject] = useState(config.subjects[0] || 'فرهنگ و هنر');
@@ -171,10 +173,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Students Tab States
   const [stuClassFilter, setStuClassFilter] = useState(config.classes[0] || 'هفتم الف');
-  const [newStuName, setNewStuName] = useState('');
+  const [newStuFirstName, setNewStuFirstName] = useState('');
+  const [newStuLastName, setNewStuLastName] = useState('');
   const [newStuCode, setNewStuCode] = useState('');
   const [bulkStuText, setBulkStuText] = useState('');
   const [showBulkAdd, setShowBulkAdd] = useState(false);
+  const [isExtractingAI, setIsExtractingAI] = useState(false);
+  const aiFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Toolkit States: Random Picker
   const [pickerClass, setPickerClass] = useState(config.classes[0] || 'هفتم الف');
@@ -208,6 +213,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
     return () => clearInterval(interval);
   }, [isTimerRunning, timerSecondsLeft]);
+
+  // Auto-switch selected assignment when activeSubject changes
+  useEffect(() => {
+    if (activeSubject !== 'all') {
+      const match = assignments.find((a) => a.subject === activeSubject);
+      if (match) {
+        setSelectedAssId(match.id);
+      }
+    }
+  }, [activeSubject, assignments]);
 
   // Handle Login
   const handleLoginSubmit = (e: React.FormEvent) => {
@@ -287,16 +302,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Active Assignment for Grading
   const activeAss = subjectAssignments.find((a) => a.id === selectedAssId) || subjectAssignments[0];
-
-  // Auto-switch selected assignment when activeSubject changes
-  useEffect(() => {
-    if (activeSubject !== 'all') {
-      const match = assignments.find((a) => a.subject === activeSubject);
-      if (match) {
-        setSelectedAssId(match.id);
-      }
-    }
-  }, [activeSubject, assignments]);
 
   // Filter Attendance by search, class, and activeSubject
   const filteredAttendance = attendance.filter((r) => {
@@ -574,6 +579,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
+  const handleAIFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsExtractingAI(true);
+    try {
+      // Convert file to base64
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = (reader.result as string).split(',')[1];
+          const mimeType = file.type;
+
+          const response = await fetch('/api/extract-students', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              fileData: base64Data,
+              mimeType
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error('خطا در پردازش فایل توسط هوش مصنوعی');
+          }
+
+          const data = await response.json();
+          if (data.students && Array.isArray(data.students)) {
+            // data.students = [{firstName, lastName}, ...]
+            const formatted = data.students
+              .filter((s: any) => s.firstName || s.lastName)
+              .map((s: any) => {
+                const f = (s.firstName || '').trim();
+                const l = (s.lastName || '').trim();
+                return `${f} ${l}`.trim();
+              })
+              .join('\n');
+            
+            setBulkStuText(prev => prev ? prev + '\n' + formatted : formatted);
+            setShowBulkAdd(true);
+          }
+        } catch (err) {
+          console.error(err);
+          alert('هوش مصنوعی نتوانست فایل را پردازش کند. لطفاً فرمت دیگری را امتحان کنید یا متن را کپی کنید.');
+        } finally {
+          setIsExtractingAI(false);
+          if (aiFileInputRef.current) aiFileInputRef.current.value = '';
+        }
+      };
+      reader.onerror = () => {
+        alert('خطا در خواندن فایل');
+        setIsExtractingAI(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      alert('خطا در برقراری ارتباط با سرور');
+      setIsExtractingAI(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* سربرگ پنل دبیر و سوییچ تب‌ها */}
@@ -601,52 +669,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        {/* بخش ویژه: انتخاب درس در حال مدیریت دبیر (برای دبیرانی که چند درس تدریس می‌کنند) */}
-        <div className="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-slate-50 border border-blue-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* نمایش درس در حال مدیریت دبیر (انتخاب شده از منوی بالای پنل) */}
+        <div className="my-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <BookOpen className="w-4 h-4" />
+            <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <BookOpen className="w-3.5 h-3.5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black text-slate-800">درس در حال مدیریت دبیر:</span>
-                <span className="text-xs font-extrabold text-blue-800 bg-blue-100/90 border border-blue-200 px-2 py-0.5 rounded-lg">
-                  {activeSubject === 'all' ? 'همه دروس' : `درس ${activeSubject}`}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                اگر دبیر چند درس مختلف هستید، ابتدا درس مورد نظر را مشخص کنید تا فرم‌ها و آزمون‌ها برای آن تنظیم شوند.
-              </p>
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="font-bold text-slate-700">درس در حال مدیریت:</span>
+              <span className="font-extrabold text-blue-800 bg-blue-100/90 border border-blue-200 px-2.5 py-0.5 rounded-lg">
+                {activeSubject === 'all' ? 'همه درس‌ها' : `درس ${activeSubject}`}
+              </span>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => handleSelectActiveSubject('all')}
-              className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                activeSubject === 'all'
-                  ? 'bg-slate-800 text-white shadow-xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-2xs'
-              }`}
-            >
-              همه دروس
-            </button>
-            {config.subjects.map((subj) => (
-              <button
-                key={subj}
-                type="button"
-                onClick={() => handleSelectActiveSubject(subj)}
-                className={`text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-                  activeSubject === subj
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 shadow-2xs'
-                }`}
-              >
-                {subj}
-              </button>
-            ))}
-          </div>
+          <span className="text-[11px] text-slate-400 hidden sm:inline">
+            (تغییر درس از منوی کشویی کنار دکمه پنل دبیر در بالای صفحه)
+          </span>
         </div>
 
         {/* ساب‌تب‌های پنل مدیریت */}
@@ -654,9 +692,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           {[
             { id: 'attendance', label: 'سوابق حضور', icon: <UserCheck className="w-4 h-4" /> },
             { id: 'assignments', label: 'تکالیف', icon: <BookOpen className="w-4 h-4" /> },
-            { id: 'grades', label: 'نمرات و بازخورد', icon: <PenTool className="w-4 h-4" /> },
+            { id: 'grades', label: 'نمرات و بازخورد تکالیف', icon: <PenTool className="w-4 h-4" /> },
             { id: 'students', label: 'لیست دانش‌آموزان', icon: <Users className="w-4 h-4" /> },
-            { id: 'toolkit', label: 'آزمون‌ساز کلاسی', icon: <FileQuestion className="w-4 h-4" /> },
+            { id: 'toolkit', label: 'پنل آزمون‌ها', icon: <FileQuestion className="w-4 h-4" /> },
             { id: 'settings', label: 'تنظیمات و استقرار', icon: <SettingsIcon className="w-4 h-4" /> },
           ].map((tab) => (
             <button
@@ -771,11 +809,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
 
               <button
-                onClick={() => {
-                  if (confirm('آیا از پاکسازی تمام رکوردهای سوابق حضور اطمینان دارید؟')) {
-                    onClearAllAttendance();
-                  }
-                }}
+                onClick={() => setShowClearAttendanceModal(true)}
                 className="flex items-center gap-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 border border-rose-200 px-2.5 py-2 rounded-xl transition-colors cursor-pointer"
                 title="پاکسازی تمام سوابق"
               >
@@ -1126,11 +1160,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <Edit3 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm(`آیا از حذف تکلیف «${item.title}» مطمئن هستید؟`)) {
-                            onDeleteAssignment(item.id);
-                          }
-                        }}
+                        onClick={() => setDeletingAss(item)}
                         className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                         title="حذف"
                       >
@@ -1280,6 +1310,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         .filter(
                           (s) => activeAss.className === 'همه کلاس‌ها' || s.className === activeAss.className
                         )
+                        .sort((a, b) => {
+                          const lastNameComparison = (a.lastName || '').localeCompare(b.lastName || '', 'fa');
+                          if (lastNameComparison !== 0) return lastNameComparison;
+                          return (a.firstName || a.name).localeCompare(b.firstName || b.name, 'fa');
+                        })
                         .map((st) => (
                           <option key={st.id} value={st.name}>
                             {st.name} ({st.className})
@@ -1384,6 +1419,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         .filter(
                           (s) => activeAss.className === 'همه کلاس‌ها' || s.className === activeAss.className
                         )
+                        .sort((a, b) => {
+                          const lastNameComparison = (a.lastName || '').localeCompare(b.lastName || '', 'fa');
+                          if (lastNameComparison !== 0) return lastNameComparison;
+                          return (a.firstName || a.name).localeCompare(b.firstName || b.name, 'fa');
+                        })
                         .map((st, idx) => {
                           const g = activeAss.grades[st.name];
                           return (
@@ -1477,15 +1517,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
               {!showBulkAdd ? (
                 <>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">نام و نام خانوادگی:</label>
-                    <input
-                      type="text"
-                      value={newStuName}
-                      onChange={(e) => setNewStuName(e.target.value)}
-                      placeholder="مثال: رضا کریمی"
-                      className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">نام:</label>
+                      <input
+                        type="text"
+                        value={newStuFirstName}
+                        onChange={(e) => setNewStuFirstName(e.target.value)}
+                        placeholder="مثال: رضا"
+                        className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">نام خانوادگی:</label>
+                      <input
+                        type="text"
+                        value={newStuLastName}
+                        onChange={(e) => setNewStuLastName(e.target.value)}
+                        placeholder="مثال: کریمی"
+                        className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -1501,9 +1553,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                   <button
                     onClick={() => {
-                      if (!newStuName.trim()) return;
-                      onAddStudent(newStuName.trim(), stuClassFilter, newStuCode.trim());
-                      setNewStuName('');
+                      if (!newStuFirstName.trim() || !newStuLastName.trim()) return;
+                      onAddStudent(newStuFirstName.trim(), newStuLastName.trim(), stuClassFilter, newStuCode.trim());
+                      setNewStuFirstName('');
+                      setNewStuLastName('');
                       setNewStuCode('');
                     }}
                     className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
@@ -1534,6 +1587,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     />
                   </div>
 
+                  <div className="pt-2 border-t border-slate-100">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5 text-blue-700">
+                      <Sparkles className="w-4 h-4 text-amber-500" />
+                      استخراج هوشمند از عکس یا فایل (توسط هوش مصنوعی)
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*,.txt,.csv"
+                      ref={aiFileInputRef}
+                      onChange={handleAIFileUpload}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isExtractingAI}
+                      onClick={() => aiFileInputRef.current?.click()}
+                      className="w-full py-2 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {isExtractingAI ? (
+                        <span className="flex items-center gap-2">
+                          <span className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></span>
+                          در حال پردازش و استخراج هوشمند...
+                        </span>
+                      ) : (
+                        'انتخاب فایل یا عکس حاوی لیست اسامی'
+                      )}
+                    </button>
+                    <p className="text-[10px] text-slate-500 mt-1.5 text-justify leading-relaxed">
+                      فایل یا عکس حاوی لیست دانش‌آموزان را انتخاب کنید تا هوش مصنوعی به صورت خودکار اسامی و فامیل‌ها را تفکیک کرده و در کادر بالا قرار دهد.
+                    </p>
+                  </div>
+
                   <button
                     onClick={() => {
                       const lines = bulkStuText
@@ -1541,12 +1626,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         .map((l) => l.trim())
                         .filter(Boolean);
                       lines.forEach((name) => {
-                        onAddStudent(name, stuClassFilter);
+                        const parts = name.split(' ');
+                        const lastName = parts.length > 1 ? parts.pop()! : '';
+                        const firstName = parts.join(' ') || name;
+                        onAddStudent(firstName, lastName, stuClassFilter);
                       });
                       setBulkStuText('');
                       setShowBulkAdd(false);
                     }}
-                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer mt-2"
                   >
                     افزودن کل اسامی به این کلاس
                   </button>
@@ -1579,6 +1667,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               ) : (
                 students
                   .filter((s) => s.className === stuClassFilter)
+                  .sort((a, b) => {
+                    const lastNameComparison = (a.lastName || '').localeCompare(b.lastName || '', 'fa');
+                    if (lastNameComparison !== 0) return lastNameComparison;
+                    return (a.firstName || a.name).localeCompare(b.firstName || b.name, 'fa');
+                  })
                   .map((st, idx) => (
                     <div key={st.id} className="p-3.5 flex items-center justify-between hover:bg-slate-50">
                       <div className="flex items-center gap-3">
@@ -1611,6 +1704,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         <ExamManager
           config={config}
           exams={exams}
+          students={students}
           activeSubject={activeSubject}
           onCreateExam={onCreateExam || (() => {})}
           onUpdateExam={onUpdateExam || (() => {})}
@@ -1895,6 +1989,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <strong className="text-slate-800">لینک اختصاصی:</strong> نتلیفای بلافاصله یک لینک اینترنتی پرسرعت به شما می‌دهد که برای تمامی دانش‌آموزان در ایران با هر اینترنتی و بدون فیلترشکن باز می‌شود.
                 </li>
               </ol>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Assignment Modal */}
+      {deletingAss && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-100">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="font-extrabold text-base text-slate-800">حذف تکلیف</h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              آیا از حذف تکلیف <strong className="text-slate-800">«{deletingAss.title}»</strong> اطمینان دارید؟
+            </p>
+            <p className="text-[11px] text-rose-500 bg-rose-50/70 p-2.5 rounded-xl border border-rose-100">
+              ⚠️ تمامی نمرات ثبت‌شده برای این تکلیف نیز حذف خواهند شد.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingAss(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deletingAss) {
+                    onDeleteAssignment(deletingAss.id);
+                    setDeletingAss(null);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                بله، تکلیف حذف شود
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear All Attendance Modal */}
+      {showClearAttendanceModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-100">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="font-extrabold text-base text-slate-800">پاکسازی کل سوابق حضور و غیاب</h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              آیا از پاکسازی تمام رکوردهای سوابق حضور و غیاب دانش‌آموزان اطمینان دارید؟
+            </p>
+            <p className="text-[11px] text-rose-500 bg-rose-50/70 p-2.5 rounded-xl border border-rose-100">
+              ⚠️ تمام سوابق ثبت‌شده قبلی حذف می‌شوند و قابل بازیابی نخواهند بود (مگر از فایل پشتیبان).
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowClearAttendanceModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onClearAllAttendance();
+                  setShowClearAttendanceModal(false);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                بله، پاکسازی شود
+              </button>
             </div>
           </div>
         </div>

@@ -25,9 +25,12 @@ import {
   Pencil,
   Filter,
   Smartphone,
-  ShieldAlert
+  ShieldAlert,
+  Calendar,
+  ArrowUpDown,
+  MessageSquare
 } from 'lucide-react';
-import { Exam, QuizQuestion, ExamSubmission, AppConfig } from '../types';
+import { Exam, QuizQuestion, ExamSubmission, AppConfig, Student } from '../types';
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
 import { sounds } from '../utils/sound';
 import confetti from 'canvas-confetti';
@@ -35,6 +38,7 @@ import confetti from 'canvas-confetti';
 interface ExamManagerProps {
   config: AppConfig;
   exams: Exam[];
+  students?: Student[];
   activeSubject?: string;
   onCreateExam: (exam: Omit<Exam, 'id' | 'createdAt' | 'submissions'>) => void;
   onUpdateExam: (exam: Exam) => void;
@@ -45,6 +49,7 @@ interface ExamManagerProps {
 export const ExamManager: React.FC<ExamManagerProps> = ({
   config,
   exams,
+  students = [],
   activeSubject,
   onCreateExam,
   onUpdateExam,
@@ -64,9 +69,18 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [description, setDescription] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(20);
 
+  // Scheduling fields
+  const [hasSchedule, setHasSchedule] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState(getTodayShamsi().dateString);
+  const [startTime, setStartTime] = useState('08:00');
+  const [endTime, setEndTime] = useState('12:00');
+
   // Filters for exam list
   const [filterClass, setFilterClass] = useState('all');
   const [filterSubject, setFilterSubject] = useState(activeSubject || 'all');
+
+  // Submissions sorting: 'family_asc' | 'score_desc' | 'time_desc'
+  const [submissionSortBy, setSubmissionSortBy] = useState<'family_asc' | 'score_desc' | 'time_desc'>('family_asc');
 
   // Sync with activeSubject prop
   useEffect(() => {
@@ -93,10 +107,14 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
   const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
   // Modal for viewing student uploaded photo full-size
   const [previewPhoto, setPreviewPhoto] = useState<{ studentName: string; photoUrl: string } | null>(null);
+  // Modal for confirming exam deletion
+  const [deletingExam, setDeletingExam] = useState<Exam | null>(null);
 
   // Grading states for descriptive exam
   const [gradingScores, setGradingScores] = useState<Record<string, string>>({});
   const [gradingFeedbacks, setGradingFeedbacks] = useState<Record<string, string>>({});
+  const [savedStudentName, setSavedStudentName] = useState<string | null>(null);
+  const [savedStudentSet, setSavedStudentSet] = useState<Record<string, boolean>>({});
 
   // Notification
   const [notice, setNotice] = useState<{ title: string; desc: string } | null>(null);
@@ -109,6 +127,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     setSubject(activeSubject && activeSubject !== 'all' ? activeSubject : (config.subjects[0] || 'فرهنگ و هنر'));
     setDescription('');
     setDurationMinutes(20);
+    setHasSchedule(false);
+    setScheduledDate(getTodayShamsi().dateString);
+    setStartTime('08:00');
+    setEndTime('12:00');
     setExamFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setQuestions([]);
@@ -123,6 +145,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     setSubject(item.subject);
     setDescription(item.description || '');
     setDurationMinutes(item.durationMinutes || 20);
+    setHasSchedule(!!item.hasSchedule);
+    setScheduledDate(item.scheduledDate || getTodayShamsi().dateString);
+    setStartTime(item.startTime || '08:00');
+    setEndTime(item.endTime || '12:00');
     if (item.fileName) {
       setExamFile({
         name: item.fileName,
@@ -142,6 +168,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
     setEditingExamId(null);
     setTitle('');
     setDescription('');
+    setHasSchedule(false);
     setExamFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     setQuestions([]);
@@ -227,6 +254,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         subject,
         description: description.trim(),
         durationMinutes: Number(durationMinutes) || 15,
+        hasSchedule: hasSchedule,
+        scheduledDate: hasSchedule ? scheduledDate : undefined,
+        startTime: hasSchedule ? startTime : undefined,
+        endTime: hasSchedule ? endTime : undefined,
         fileName: examFile?.name,
         fileSize: examFile?.size,
         fileData: examFile?.data,
@@ -256,6 +287,10 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
         subject,
         description: description.trim(),
         durationMinutes: Number(durationMinutes) || 15,
+        hasSchedule: hasSchedule,
+        scheduledDate: hasSchedule ? scheduledDate : undefined,
+        startTime: hasSchedule ? startTime : undefined,
+        endTime: hasSchedule ? endTime : undefined,
         isActive: true,
         shamsiDate: today.dateString,
         fileName: examFile?.name,
@@ -312,7 +347,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             <span>سامانه آزمون‌ساز و تصحیح هوشمند</span>
           </div>
           <h2 className="text-lg sm:text-xl font-black">
-            آزمون‌ساز کلاسی و کوئیز آنلاین دانش‌آموزی
+            پنل آزمون‌ها و کوئیز آنلاین دانش‌آموزی
           </h2>
           <p className="text-xs text-blue-100/90 max-w-2xl leading-relaxed">
             تعریف آزمون‌های تشریحی با بارگذاری عکس برگه سوال و دریافت پاسخ دست‌نویس به صورت عکس، و ساخت آزمون‌های تستی چهار گزینه‌ای با تایمر زنده و تصحیح خودکار آنی.
@@ -497,6 +532,65 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     className="w-full text-xs font-bold px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600 font-mono text-center"
                   />
                 </div>
+              </div>
+
+              {/* Scheduling Section: Date and Time Window for Student Entry */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={hasSchedule}
+                      onChange={(e) => setHasSchedule(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                    />
+                    <Calendar className="w-4 h-4 text-blue-600" />
+                    <span>تنظیم زمان‌بندی و بازه مجاز ورود به آزمون (ساعت شروع و پایان)</span>
+                  </label>
+                  {hasSchedule && (
+                    <span className="text-[11px] text-emerald-700 bg-emerald-100 font-bold px-2 py-0.5 rounded-md">
+                      زمان‌بندی فعال است
+                    </span>
+                  )}
+                </div>
+
+                {hasSchedule && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">تاریخ برگزاری (شمسی):</label>
+                      <input
+                        type="text"
+                        value={scheduledDate}
+                        onChange={(e) => setScheduledDate(e.target.value)}
+                        placeholder="مثال: ۱۴۰۳/۰۹/۱۰"
+                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-blue-600 font-mono text-center"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">ساعت شروع ورود (از):</label>
+                      <input
+                        type="time"
+                        value={startTime}
+                        onChange={(e) => setStartTime(e.target.value)}
+                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-blue-600 font-mono text-center"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">ساعت پایان ورود (تا):</label>
+                      <input
+                        type="time"
+                        value={endTime}
+                        onChange={(e) => setEndTime(e.target.value)}
+                        className="w-full text-xs font-bold px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-blue-600 font-mono text-center"
+                      />
+                    </div>
+                  </div>
+                )}
+                <p className="text-[11px] text-slate-500">
+                  {hasSchedule
+                    ? 'دانش‌آموزان فقط در این تاریخ و بازه زمانی مشخص شده مجاز به فشردن دکمه شروع آزمون خواهند بود.'
+                    : 'در صورت عدم فعال‌سازی، آزمون بلافاصله و در هر ساعتی برای دانش‌آموزان فعال خواهد بود.'}
+                </p>
               </div>
 
               <div>
@@ -770,6 +864,13 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
               const submissionCount = Object.keys(item.submissions || {}).length;
               const isSelected = selectedExamId === item.id;
 
+              // Calculate class participants statistics
+              const targetStudents = item.className === 'همه کلاس‌ها'
+                ? students
+                : students.filter((s) => s.className === item.className);
+              const totalClassCount = targetStudents.length > 0 ? targetStudents.length : Math.max(submissionCount, 1);
+              const notParticipatedCount = Math.max(0, totalClassCount - submissionCount);
+
               return (
                 <div
                   key={item.id}
@@ -779,7 +880,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           item.type === 'descriptive'
                             ? 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -793,8 +894,17 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                         </span>
 
                         <span className="text-[10px] text-slate-500 font-medium">
-                          {item.subject}
+                          درس {item.subject}
                         </span>
+
+                        {item.hasSchedule && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-600" />
+                            <span>
+                              ورود: {toPersianDigits(item.startTime || '۰۸:۰۰')} تا {toPersianDigits(item.endTime || '۱۲:۰۰')}
+                            </span>
+                          </span>
+                        )}
                       </div>
 
                       <h4 className="font-extrabold text-sm text-slate-800 leading-snug">
@@ -806,7 +916,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                       type="button"
                       onClick={() => handleToggleExamStatus(item)}
                       title={item.isActive ? 'آزمون فعال است (کلیک برای غیرفعال کردن)' : 'آزمون متوقف است (کلیک برای فعال‌سازی)'}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
                         item.isActive
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                           : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
@@ -827,30 +937,39 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     {item.description || 'توضیحاتی برای این آزمون ثبت نشده است.'}
                   </p>
 
-                  <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-3">
-                      <span className="flex items-center gap-1 font-mono">
+                  {/* تاریخ دقیق انتشار و آمار شرکت‌کنندگان */}
+                  <div className="bg-slate-50/80 p-3 rounded-xl border border-slate-200/80 space-y-2 text-xs">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-slate-600 font-medium flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                        <strong>تاریخ دقیق انتشار:</strong>{' '}
+                        <span className="font-mono text-slate-800 font-bold">{toPersianDigits(item.shamsiDate || '۱۴۰۳/۰۹/۱۰')}</span>
+                      </span>
+
+                      <span className="flex items-center gap-1 font-mono text-slate-600">
                         <Clock className="w-3.5 h-3.5 text-blue-600" />
-                        <span>{toPersianDigits(item.durationMinutes)} دقیقه</span>
+                        <span>مدت: <strong>{toPersianDigits(item.durationMinutes)}</strong> دقیقه</span>
+                      </span>
+                    </div>
+
+                    {/* آمار سبز و قرمز */}
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 flex-wrap">
+                      <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 font-extrabold text-[11px] rounded-lg flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                        <span>شرکت کرده‌اند: <strong>{toPersianDigits(submissionCount)}</strong> نفر</span>
+                      </span>
+
+                      <span className="px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 font-extrabold text-[11px] rounded-lg flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span>
+                        <span>هنوز شرکت نکرده‌اند: <strong>{toPersianDigits(notParticipatedCount)}</strong> نفر</span>
                       </span>
 
                       {item.type === 'multiple-choice' && (
-                        <span className="text-slate-600">
-                          {toPersianDigits(item.questions?.length || 0)} سوال
-                        </span>
-                      )}
-
-                      {item.fileName && (
-                        <span className="text-blue-600 flex items-center gap-1 text-[11px] font-medium">
-                          <ImageIcon className="w-3.5 h-3.5" />
-                          <span>برگه سوالات پیوست است</span>
+                        <span className="text-[11px] text-slate-500 mr-auto font-medium">
+                          {toPersianDigits(item.questions?.length || 0)} سوال تستی
                         </span>
                       )}
                     </div>
-
-                    <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md text-[11px]">
-                      {toPersianDigits(submissionCount)} برگه ارسالی
-                    </span>
                   </div>
 
                   {/* Card Actions */}
@@ -883,12 +1002,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
                     <button
                       type="button"
-                      onClick={() => {
-                        if (confirm(`آیا از حذف آزمون «${item.title}» مطمئن هستید؟`)) {
-                          onDeleteExam(item.id);
-                          if (selectedExamId === item.id) setSelectedExamId(null);
-                        }
-                      }}
+                      onClick={() => setDeletingExam(item)}
                       className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                       title="حذف آزمون"
                     >
@@ -905,7 +1019,7 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
       {/* Submissions Section for Selected Exam */}
       {selectedExam && (
         <div className="bg-white rounded-2xl border border-blue-300 shadow-md p-5 space-y-4 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center">
                 <FileQuestion className="w-4 h-4" />
@@ -915,29 +1029,89 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   کارنامه و برگه‌های امتحانی: {selectedExam.title}
                 </h4>
                 <p className="text-xs text-slate-500">
-                  کلاس: {selectedExam.className} • مدت: {toPersianDigits(selectedExam.durationMinutes)} دقیقه • نوع: {selectedExam.type === 'descriptive' ? 'تشریحی (ارسال عکس)' : 'تستی چند گزینه‌ای'}
+                  کلاس: {selectedExam.className} • درس: {selectedExam.subject} • مدت: {toPersianDigits(selectedExam.durationMinutes)} دقیقه • نوع: {selectedExam.type === 'descriptive' ? 'تشریحی (ارسال عکس)' : 'تستی چند گزینه‌ای'}
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setSelectedExamId(null)}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1 bg-slate-100 rounded-lg cursor-pointer"
-            >
-              بستن پنل
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* مرتب‌سازی پاسخ‌ها بر اساس الفبا، نمره یا زمان */}
+              <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-xl border border-slate-200 text-xs">
+                <ArrowUpDown className="w-3.5 h-3.5 text-blue-600" />
+                <span className="font-bold text-slate-600">مرتب‌سازی:</span>
+                <select
+                  value={submissionSortBy}
+                  onChange={(e) => setSubmissionSortBy(e.target.value as any)}
+                  className="bg-transparent font-bold text-slate-800 cursor-pointer focus:outline-none"
+                >
+                  <option value="family_asc">الفبایی (نام و نام خانوادگی)</option>
+                  <option value="score_desc">نمره (از بیشترین به کمترین)</option>
+                  <option value="time_desc">زمان ارسال (جدیدترین)</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedExamId(null)}
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 px-3 py-1.5 bg-slate-100 rounded-lg cursor-pointer"
+              >
+                بستن پنل
+              </button>
+            </div>
           </div>
 
+          {/* In-Panel Success Alert for Teacher Grading */}
+          {savedStudentName && (
+            <div className="bg-emerald-50 border border-emerald-300 text-emerald-900 p-3.5 rounded-xl flex items-center justify-between gap-3 shadow-xs animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-emerald-950">
+                    نمره و بازخورد دبیر برای دانش‌آموز «{savedStudentName}» با موفقیت ثبت شد.
+                  </p>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    این بازخورد در کارنامه آنلاین این دانش‌آموز ذخیره شد و برای او قابل مشاهده است.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSavedStudentName(null)}
+                className="text-emerald-700 hover:text-emerald-950 p-1 text-xs cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {(() => {
-            const subsList = (Object.values(selectedExam.submissions || {}) as ExamSubmission[]);
-            if (subsList.length === 0) {
+            const rawSubsList = (Object.values(selectedExam.submissions || {}) as ExamSubmission[]);
+            if (rawSubsList.length === 0) {
               return (
                 <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl">
                   هنوز هیچ دانش‌آموزی پاسخی برای این آزمون ارسال نکرده است. به محض ارسال توسط دانش‌آموز، تصویر پاسخنامه یا درصد تستی در اینجا نمایش داده خواهد شد.
                 </div>
               );
             }
+
+            // Sort submissions
+            const subsList = [...rawSubsList].sort((a, b) => {
+              if (submissionSortBy === 'family_asc') {
+                return a.studentName.trim().localeCompare(b.studentName.trim(), 'fa');
+              } else if (submissionSortBy === 'score_desc') {
+                const getScoreValue = (sub: ExamSubmission) => {
+                  if (sub.calculatedScore20 !== undefined) return sub.calculatedScore20;
+                  if (sub.teacherScore) return Number(sub.teacherScore) || 0;
+                  if (sub.scorePercent !== undefined) return Math.ceil((sub.scorePercent / 100) * 20);
+                  return 0;
+                };
+                return getScoreValue(b) - getScoreValue(a);
+              } else {
+                return (b.id || '').localeCompare(a.id || '');
+              }
+            });
 
             // Identify duplicate Eitaa IDs or Device IDs
             const eitaaCounts = new Map<string, number>();
@@ -979,6 +1153,15 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                   const isDeviceDup = !!(dKey && (deviceCounts.get(dKey) || 0) > 1);
 
                   const isSuspicious = isMultiStudentEitaa || isEitaaDup || isMultiStudentDev || isDeviceDup;
+
+                  const totalQuestions = selectedExam.questions?.length || 1;
+                  const score20 = sub.calculatedScore20 !== undefined 
+                    ? sub.calculatedScore20 
+                    : sub.correctCount !== undefined 
+                      ? Math.ceil((sub.correctCount / totalQuestions) * 20)
+                      : sub.scorePercent !== undefined 
+                        ? Math.ceil((sub.scorePercent / 100) * 20)
+                        : 0;
 
                   return (
                     <div
@@ -1030,9 +1213,9 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
                         {/* If multiple choice */}
                         {selectedExam.type === 'multiple-choice' && (
-                          <div className="flex items-center gap-2.5 text-xs pt-1">
-                            <span className="font-black text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
-                              نمره تستی: {toPersianDigits(sub.scorePercent ?? 0)}٪
+                          <div className="flex items-center gap-2.5 text-xs pt-1 flex-wrap">
+                            <span className="font-black text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md border border-emerald-300">
+                              نمره: {toPersianDigits(score20)} از ۲۰ ({toPersianDigits(sub.scorePercent ?? 0)}٪)
                             </span>
                             <span className="text-emerald-600 font-bold">
                               ✓ {toPersianDigits(sub.correctCount ?? 0)} درست
@@ -1043,12 +1226,17 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                             <span className="text-slate-500">
                               - {toPersianDigits(sub.unansweredCount ?? 0)} نزده
                             </span>
+                            {sub.teacherFeedback && (
+                              <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                                نظر ثبت‌شده دبیر: {sub.teacherFeedback}
+                              </span>
+                            )}
                           </div>
                         )}
 
                         {/* If descriptive photo answer */}
                         {selectedExam.type === 'descriptive' && (
-                          <div className="flex items-center gap-2 pt-1 text-xs">
+                          <div className="flex items-center gap-2 pt-1 text-xs flex-wrap">
                             {sub.photoAnswer ? (
                               <button
                                 type="button"
@@ -1063,52 +1251,132 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                             )}
                             {sub.teacherScore && (
                               <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
-                                نمره دبیر: {toPersianDigits(sub.teacherScore)}
+                                نمره دبیر: {toPersianDigits(sub.teacherScore)} از ۲۰
+                              </span>
+                            )}
+                            {sub.teacherFeedback && (
+                              <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                                بازخورد: {sub.teacherFeedback}
                               </span>
                             )}
                           </div>
                         )}
                       </div>
 
-                  {/* Teacher Grading Box for Descriptive */}
-                  {selectedExam.type === 'descriptive' && (
-                    <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                      <input
-                        type="text"
-                        placeholder="نمره (مثال: ۱۹)"
-                        defaultValue={sub.teacherScore || ''}
-                        onChange={(e) => setGradingScores({ ...gradingScores, [sub.studentName]: e.target.value })}
-                        className="w-24 text-xs font-bold px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-center focus:outline-blue-600"
-                      />
-                      <input
-                        type="text"
-                        placeholder="نظر یا بازخورد دبیر..."
-                        defaultValue={sub.teacherFeedback || ''}
-                        onChange={(e) => setGradingFeedbacks({ ...gradingFeedbacks, [sub.studentName]: e.target.value })}
-                        className="w-44 text-xs px-2 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-blue-600"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const sc = gradingScores[sub.studentName] ?? sub.teacherScore ?? '';
-                          const fb = gradingFeedbacks[sub.studentName] ?? sub.teacherFeedback ?? '';
-                          onGradeSubmission(selectedExam.id, sub.studentName, sc, fb);
-                          alert(`نمره و نظر برای دانش‌آموز «${sub.studentName}» ذخیره شد.`);
-                        }}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-lg shadow-xs cursor-pointer"
-                      >
-                        ثبت نمره
-                      </button>
+                      {/* Teacher Grading & Feedback Box for Both Types */}
+                      {(() => {
+                        const isGraded = Boolean(
+                          sub.teacherFeedback ||
+                          sub.teacherScore ||
+                          savedStudentSet[sub.studentName] ||
+                          savedStudentName === sub.studentName
+                        );
+
+                        return (
+                          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                            <input
+                              type="text"
+                              placeholder={selectedExam.type === 'descriptive' ? 'نمره از ۲۰ (مثال: ۱۹)' : 'اصلاح نمره'}
+                              defaultValue={sub.teacherScore || (selectedExam.type === 'multiple-choice' ? String(score20) : '')}
+                              onChange={(e) => setGradingScores({ ...gradingScores, [sub.studentName]: e.target.value })}
+                              className="w-24 text-xs font-bold px-2 py-1.5 border border-slate-300 rounded-lg bg-white text-center focus:outline-blue-600"
+                            />
+                            <input
+                              type="text"
+                              placeholder="توضیحات و بازخورد دبیر برای دانش‌آموز..."
+                              defaultValue={sub.teacherFeedback || ''}
+                              onChange={(e) => setGradingFeedbacks({ ...gradingFeedbacks, [sub.studentName]: e.target.value })}
+                              className="w-52 text-xs px-2 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-blue-600"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const sc = gradingScores[sub.studentName] ?? sub.teacherScore ?? (selectedExam.type === 'multiple-choice' ? String(score20) : '');
+                                const fb = gradingFeedbacks[sub.studentName] ?? sub.teacherFeedback ?? '';
+                                onGradeSubmission(selectedExam.id, sub.studentName, sc, fb);
+                                setSavedStudentSet((prev) => ({ ...prev, [sub.studentName]: true }));
+                                setSavedStudentName(sub.studentName);
+                                setNotice({
+                                  title: 'بازخورد دبیر با موفقیت ثبت شد',
+                                  desc: `نمره (${toPersianDigits(sc || 'ثبت شده')}) و نظر دبیر برای دانش‌آموز «${sub.studentName}» با موفقیت ذخیره شد.`
+                                });
+                                try {
+                                  sounds.playCheer();
+                                } catch {}
+                              }}
+                              className={`px-3 py-1.5 font-bold text-xs rounded-lg shadow-xs cursor-pointer flex items-center gap-1 transition-all duration-200 ${
+                                isGraded
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-1 ring-emerald-300'
+                                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                              }`}
+                            >
+                              {isGraded ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-100" />
+                                  <span>✓ نظر و نمره ثبت شد</span>
+                                </>
+                              ) : (
+                                <>
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span>ثبت نظر و نمره</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Delete Exam Confirmation Modal */}
+      {deletingExam && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-100">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="font-extrabold text-base text-slate-800">حذف آزمون</h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              آیا از حذف آزمون <strong className="text-slate-800">«{deletingExam.title}»</strong> اطمینان دارید؟
+            </p>
+            <p className="text-[11px] text-rose-500 bg-rose-50/70 p-2.5 rounded-xl border border-rose-100">
+              ⚠️ این عملیات غیرقابل بازگشت است و تمامی پاسخ‌ها و برگه‌های ثبت‌شده برای این آزمون نیز حذف خواهند شد.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingExam(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deletingExam) {
+                    onDeleteExam(deletingExam.id);
+                    if (selectedExamId === deletingExam.id) setSelectedExamId(null);
+                    setDeletingExam(null);
+                  }
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+              >
+                بله، آزمون حذف شود
+              </button>
+            </div>
           </div>
-        );
-      })()}
-    </div>
-  )}
+        </div>
+      )}
 
       {/* Fullscreen Photo Modal */}
       {previewPhoto && (

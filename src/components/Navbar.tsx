@@ -54,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500 font-medium">
-                  {config.teacherName ? `مدرس: ${config.teacherName}` : 'سیستم مدیریت یکپارچه کلاس'} • سال تحصیلی {toPersianDigits(config.academicYear)}
+                  سال تحصیلی {toPersianDigits(config.academicYear)}
                 </p>
               </div>
             </div>
@@ -87,27 +87,15 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="py-2 flex items-center justify-between overflow-x-auto scrollbar-none gap-2">
           <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
             <button
-              onClick={() => setActiveTab('student-attendance')}
+              onClick={() => setActiveTab('student' as any)}
               className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'student-attendance'
+                activeTab === ('student' as any)
                   ? 'bg-white text-blue-700 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <ClipboardCheck className="w-4 h-4" />
-              <span>فرم ثبت حضور</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('student-assignments')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                activeTab === 'student-assignments'
-                  ? 'bg-white text-blue-700 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>تکالیف و نمرات دانش‌آموز</span>
+              <span>ورود دانش‌آموز</span>
             </button>
 
             {/* دکمه پنل دبیر و لیست کشویی انتخاب درس به عنوان زیرمجموعه یکپارچه آن */}

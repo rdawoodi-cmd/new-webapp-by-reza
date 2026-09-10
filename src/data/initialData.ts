@@ -22,7 +22,7 @@ export const DEFAULT_SUBJECTS = [
 export function getInitialConfig(): AppConfig {
   return {
     adminPin: '1234',
-    schoolName: 'دبیرستان دوره اول نمونه دولتی شهید چمران',
+    schoolName: 'دبیرستان امام خمینی سمیرم',
     teacherName: 'استاد داوودی',
     academicYear: '۱۴۰۳ - ۱۴۰۴',
     classes: DEFAULT_CLASSES,

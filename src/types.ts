@@ -1,6 +1,6 @@
 export type Role = 'student' | 'admin';
 
-export type MainTab = 'student-attendance' | 'student-assignments' | 'admin' | 'app-info';
+export type MainTab = 'student' | 'admin' | 'app-info';
 
 export type AdminSubTab = 'attendance' | 'assignments' | 'grades' | 'students' | 'toolkit' | 'settings';
 
@@ -19,12 +19,16 @@ export interface AttendanceRecord {
 
 export interface StudentProfile {
   id: string;
-  name: string;
+  name: string; // Will now typically be firstName + " " + lastName
+  firstName?: string;
+  lastName?: string;
   className: string;
   code?: string;
   notes?: string;
   createdAt: string;
 }
+
+export type Student = StudentProfile;
 
 export interface GradeEntry {
   score: string; // "19.5" or "خیلی خوب"
@@ -88,6 +92,7 @@ export interface ExamSubmission {
   // برای آزمون تستی چند گزینه‌ای:
   selectedOptions?: Record<string, number>; // questionId -> selectedIndex
   scorePercent?: number; // درصد نمره (۰ تا ۱۰۰)
+  calculatedScore20?: number; // نمره از ۲۰ (گرد شده به بالا)
   correctCount?: number;
   wrongCount?: number;
   unansweredCount?: number;
@@ -104,6 +109,11 @@ export interface Exam {
   isActive: boolean; // فعال بودن برای دانش‌آموزان
   shamsiDate: string;
   createdAt: string;
+  // محدودیت بازه زمانی ورود به آزمون:
+  hasSchedule?: boolean;
+  scheduledDate?: string; // تاریخ شمسی مجاز برای آزمون (مثلاً ۱۴۰۳/۰۷/۱۵)
+  startTime?: string; // ساعت شروع مجاز (مثلاً ۱۲:۰۰)
+  endTime?: string; // ساعت پایان مهلت ورود (مثلاً ۱۳:۰۰)
   // فایل سوالات تشریحی (آپلود شده توسط دبیر):
   fileName?: string;
   fileSize?: string;

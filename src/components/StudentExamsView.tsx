@@ -14,7 +14,10 @@ import {
   Sparkles,
   BookOpen,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  Calendar,
+  Lock,
+  MessageSquare
 } from 'lucide-react';
 import { Exam, QuizQuestion, ExamSubmission, AppConfig } from '../types';
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
@@ -25,18 +28,116 @@ interface StudentExamsViewProps {
   config: AppConfig;
   exams: Exam[];
   selectedClass: string;
+  selectedSubject?: string;
+  filterSubject?: string;
+  onFilterSubjectChange?: (sub: string) => void;
   studentName: string;
   onSubmitExam: (examId: string, submission: ExamSubmission) => void;
 }
+
+export const calculateScore20 = (correctCount: number, totalQuestions: number): number => {
+  if (!totalQuestions || totalQuestions <= 0) return 0;
+  // اگر عدد اعشاری شود، طبق درخواست کاربر گرد به بالا می‌شود
+  return Math.ceil((correctCount / totalQuestions) * 20);
+};
+
+export const getDisplayScore20 = (submission: ExamSubmission, totalQuestions?: number): number => {
+  if (submission.calculatedScore20 !== undefined) {
+    return submission.calculatedScore20;
+  }
+  if (submission.correctCount !== undefined && totalQuestions && totalQuestions > 0) {
+    return calculateScore20(submission.correctCount, totalQuestions);
+  }
+  if (submission.scorePercent !== undefined) {
+    return Math.ceil((submission.scorePercent / 100) * 20);
+  }
+  return 0;
+};
+
+export const getScheduleStatus = (ex: Exam) => {
+  if (!ex.hasSchedule) return { canStart: true, message: '', badge: '' };
+
+  const today = getTodayShamsi();
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  if (ex.scheduledDate && ex.scheduledDate.trim() && ex.scheduledDate !== today.dateString) {
+    return {
+      canStart: false,
+      status: 'date_mismatch',
+      badge: `تاریخ برگزاری: ${toPersianDigits(ex.scheduledDate)}`,
+      message: `این آزمون برای تاریخ ${toPersianDigits(ex.scheduledDate)} برنامه‌ریزی شده است.`
+    };
+  }
+
+  if (ex.startTime && ex.startTime.trim()) {
+    const [sH, sM] = ex.startTime.split(':').map(Number);
+    if (!isNaN(sH) && !isNaN(sM)) {
+      const startTotalMin = sH * 60 + sM;
+      if (currentMinutes < startTotalMin) {
+        return {
+          canStart: false,
+          status: 'not_started',
+          badge: `شروع ورود: از ساعت ${toPersianDigits(ex.startTime)}`,
+          message: `مهلت ورود به این آزمون از ساعت ${toPersianDigits(ex.startTime)} آغاز می‌شود.`
+        };
+      }
+    }
+  }
+
+  if (ex.endTime && ex.endTime.trim()) {
+    const [eH, eM] = ex.endTime.split(':').map(Number);
+    if (!isNaN(eH) && !isNaN(eM)) {
+      const endTotalMin = eH * 60 + eM;
+      if (currentMinutes > endTotalMin) {
+        return {
+          canStart: false,
+          status: 'ended',
+          badge: `مهلت ورود پایان یافته (${toPersianDigits(ex.endTime)})`,
+          message: `مهلت ورود به این آزمون در ساعت ${toPersianDigits(ex.endTime)} به پایان رسیده است.`
+        };
+      }
+    }
+  }
+
+  return {
+    canStart: true,
+    status: 'open',
+    badge: ex.endTime ? `مهلت ورود تا ساعت ${toPersianDigits(ex.endTime)}` : 'فعال برای ورود',
+    message: ''
+  };
+};
 
 export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
   config,
   exams,
   selectedClass,
+  selectedSubject,
+  filterSubject: propFilterSubject,
+  onFilterSubjectChange,
   studentName,
   onSubmitExam,
 }) => {
   const [activeExamId, setActiveExamId] = useState<string | null>(null);
+  const [internalFilterSubject, setInternalFilterSubject] = useState<string>(
+    propFilterSubject || selectedSubject || 'all'
+  );
+
+  useEffect(() => {
+    if (propFilterSubject !== undefined) {
+      setInternalFilterSubject(propFilterSubject);
+    } else if (selectedSubject) {
+      setInternalFilterSubject(selectedSubject);
+    }
+    // تغییر درس بلافاصله آزمون باز شده قبلی را می‌بندد تا کارت روی نتیجه درس قبلی نماند
+    setActiveExamId(null);
+    setTimerRunning(false);
+    setSelectedAnswers({});
+    setTestResult(null);
+    setPhotoData(null);
+  }, [propFilterSubject, selectedSubject]);
+
+  const currentFilterSubject = propFilterSubject !== undefined ? propFilterSubject : internalFilterSubject;
   
   // Timer state
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
@@ -52,6 +153,7 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
   // Multiple-choice answers state: questionId -> selectedOptionIndex (0, 1, 2, 3)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [testResult, setTestResult] = useState<{
+    score20: number;
     scorePercent: number;
     correctCount: number;
     wrongCount: number;
@@ -60,25 +162,61 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
 
   const [questionZoomUrl, setQuestionZoomUrl] = useState<string | null>(null);
 
-  // Filter exams for student's class
+  // Filter exams for student's class and subject
   const classExams = exams.filter(
-    (e) => e.isActive && (e.className === 'همه کلاس‌ها' || e.className === selectedClass)
+    (e) => e.isActive && 
+      (e.className === 'همه کلاس‌ها' || e.className === selectedClass) &&
+      (currentFilterSubject === 'all' || e.subject === currentFilterSubject)
   );
 
   const activeExam = exams.find((e) => e.id === activeExamId);
   const existingSubmission = activeExam && studentName.trim() ? activeExam.submissions[studentName.trim()] : undefined;
 
-  // Start exam and timer
+  // Start exam and timer (or review submitted exam)
   const handleStartExam = (exam: Exam) => {
+    const cleanName = studentName.trim();
+    const existing = cleanName && exam.submissions ? exam.submissions[cleanName] : undefined;
+
+    if (!existing) {
+      const schedule = getScheduleStatus(exam);
+      if (!schedule.canStart) {
+        alert(schedule.message || 'ورود به این آزمون در حال حاضر مقدور نیست.');
+        return;
+      }
+    }
+
     setActiveExamId(exam.id);
     setSelectedAnswers({});
     setTestResult(null);
     setPhotoData(null);
     setPhotoName(null);
 
-    const initialSeconds = exam.durationMinutes * 60;
-    setSecondsRemaining(initialSeconds);
-    setTimerRunning(true);
+    if (existing) {
+      if (existing.selectedOptions) {
+        setSelectedAnswers(existing.selectedOptions);
+      }
+      const totalQ = exam.questions?.length || 1;
+      const s20 = getDisplayScore20(existing, totalQ);
+
+      setTestResult({
+        score20: s20,
+        scorePercent: existing.scorePercent ?? Math.round((s20 / 20) * 100),
+        correctCount: existing.correctCount || 0,
+        wrongCount: existing.wrongCount || 0,
+        unansweredCount: existing.unansweredCount || 0,
+      });
+
+      if (existing.photoAnswer) {
+        setPhotoData(existing.photoAnswer);
+        setPhotoName(existing.photoAnswerName || 'پاسخنامه.jpg');
+      }
+      setTimerRunning(false);
+      setSecondsRemaining(0);
+    } else {
+      const initialSeconds = exam.durationMinutes * 60;
+      setSecondsRemaining(initialSeconds);
+      setTimerRunning(true);
+    }
   };
 
   // Timer effect
@@ -189,7 +327,10 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
     });
 
     const percent = Math.round((correct / questions.length) * 100);
+    const score20 = calculateScore20(correct, questions.length);
+
     const resultObj = {
+      score20: score20,
       scorePercent: percent,
       correctCount: correct,
       wrongCount: wrong,
@@ -212,6 +353,7 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
       submittedAt: `${today.dateString} - ساعت ${timeStr}`,
       selectedOptions: selectedAnswers,
       scorePercent: percent,
+      calculatedScore20: score20,
       correctCount: correct,
       wrongCount: wrong,
       unansweredCount: unanswered,
@@ -421,8 +563,11 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
                         نتیجه و کارنامه آزمون تستی شما
                       </span>
                       <h4 className="text-3xl sm:text-4xl font-black text-slate-900 mt-1">
-                        نمره کل: {toPersianDigits(testResult.scorePercent)}٪
+                        نمره شما: <span className="text-emerald-700 font-mono font-black">{toPersianDigits(testResult.score20)}</span> از ۲۰
                       </h4>
+                      <p className="text-xs text-emerald-800 mt-1 font-mono">
+                        (درصد: {toPersianDigits(testResult.scorePercent)}٪)
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 max-w-sm mx-auto pt-2">
@@ -445,6 +590,18 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
                         </span>
                       </div>
                     </div>
+
+                    {existingSubmission?.teacherFeedback && (
+                      <div className="max-w-md mx-auto p-3 bg-white border border-emerald-300 rounded-xl text-xs text-right space-y-1">
+                        <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
+                          <MessageSquare className="w-4 h-4 text-blue-600" />
+                          <span>نظر و بازخورد اختصاصی دبیر:</span>
+                        </div>
+                        <p className="text-slate-700 leading-relaxed pr-5">
+                          {existingSubmission.teacherFeedback}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ) : null}
 
@@ -572,28 +729,52 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
           <div className="flex items-center justify-between pb-1">
             <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
               <FileQuestion className="w-4 h-4 text-blue-600" />
-              <span>آزمون‌های آنلاین فعال برای کلاس شما ({toPersianDigits(classExams.length)})</span>
+              <span>
+                آزمون‌های آنلاین فعال {currentFilterSubject !== 'all' ? `(درس ${currentFilterSubject})` : ''} ({toPersianDigits(classExams.length)})
+              </span>
             </h3>
-            <span className="text-xs text-slate-500">کلاس انتخابی: {selectedClass}</span>
+            <span className="text-xs text-slate-500">کلاس: {selectedClass}</span>
           </div>
 
           {classExams.length === 0 ? (
-            <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs">
-              در حال حاضر آزمون فعالی برای کلاس {selectedClass} در دسترس نیست.
+            <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-500 text-xs space-y-2">
+              <p className="font-bold text-slate-700">
+                {currentFilterSubject !== 'all'
+                  ? `در حال حاضر آزمون فعالی برای درس «${currentFilterSubject}» در کلاس ${selectedClass} تعریف نشده است.`
+                  : `در حال حاضر آزمون فعالی برای کلاس ${selectedClass} در دسترس نیست.`}
+              </p>
+              {currentFilterSubject !== 'all' && onFilterSubjectChange && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => onFilterSubjectChange('all')}
+                    className="text-blue-600 hover:text-blue-800 hover:underline font-bold text-xs cursor-pointer inline-flex items-center gap-1 mt-1"
+                  >
+                    <span>مشاهده آزمون‌های همه دروس</span>
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
               {classExams.map((ex) => {
-                const isSubmitted = studentName.trim() ? !!ex.submissions[studentName.trim()] : false;
+                const cleanName = studentName.trim();
+                const submission = cleanName && ex.submissions ? ex.submissions[cleanName] : undefined;
+                const isSubmitted = !!submission;
+                const schedule = getScheduleStatus(ex);
+                const totalQ = ex.questions?.length || 1;
+                const score20 = submission ? getDisplayScore20(submission, totalQ) : 0;
 
                 return (
                   <div
                     key={ex.id}
-                    className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-3 hover:border-blue-300 transition-all"
+                    className={`bg-white rounded-2xl border shadow-xs p-5 space-y-3.5 transition-all ${
+                      isSubmitted ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200 hover:border-blue-300'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             ex.type === 'descriptive'
                               ? 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -605,6 +786,23 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
                           <span className="text-[10px] font-semibold text-slate-500">
                             درس: {ex.subject}
                           </span>
+
+                          {ex.hasSchedule && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              schedule.canStart
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-slate-100 text-slate-600 border border-slate-300'
+                            }`}>
+                              {schedule.badge}
+                            </span>
+                          )}
+
+                          {isSubmitted && (
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>تکمیل شده</span>
+                            </span>
+                          )}
                         </div>
 
                         <h4 className="text-sm font-extrabold text-slate-800">{ex.title}</h4>
@@ -620,19 +818,97 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
                       {ex.description || 'بدون توضیحات اضافی.'}
                     </p>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                      <span className="text-slate-400">
-                        تاریخ انتشار: {toPersianDigits(ex.shamsiDate)}
-                      </span>
+                    {/* بنر اختصاصی نمره و وضعیت شرکت در آزمون */}
+                    {isSubmitted && submission && (
+                      <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-extrabold text-emerald-950">
+                              ✓ شما در این آزمون شرکت کرده‌اید.
+                            </span>
+                            {ex.type === 'multiple-choice' && (
+                              <span className="text-xs font-black px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+                                نمره شما: {toPersianDigits(score20)} از ۲۰
+                              </span>
+                            )}
+                            {ex.type === 'descriptive' && submission.teacherScore && (
+                              <span className="text-xs font-black px-2.5 py-0.5 rounded-lg bg-emerald-600 text-white shadow-xs">
+                                نمره دبیر: {toPersianDigits(submission.teacherScore)} از ۲۰
+                              </span>
+                            )}
+                          </div>
+
+                          <span className="text-[11px] text-emerald-700 font-mono font-medium">
+                            زمان ثبت: {toPersianDigits(submission.submittedAt)}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-emerald-900 leading-relaxed">
+                          {ex.type === 'multiple-choice' && (
+                            <p className="flex items-center gap-2 flex-wrap text-[11px]">
+                              <span>تعداد پاسخ‌های صحیح: <strong>{toPersianDigits(submission.correctCount || 0)}</strong> از {toPersianDigits(ex.questions?.length || 0)}</span>
+                              <span>•</span>
+                              <span>پاسخ‌های نادرست: <strong>{toPersianDigits(submission.wrongCount || 0)}</strong></span>
+                              <span>•</span>
+                              <span>بی‌پاسخ: <strong>{toPersianDigits(submission.unansweredCount || 0)}</strong></span>
+                            </p>
+                          )}
+
+                          {ex.type === 'descriptive' && (
+                            <div className="text-[11px] space-y-1">
+                              {submission.teacherScore ? (
+                                <p>
+                                  <strong>نمره ثبت‌شده:</strong> {toPersianDigits(submission.teacherScore)} از ۲۰
+                                </p>
+                              ) : (
+                                <p className="text-amber-800 bg-amber-50/80 p-2 rounded-lg border border-amber-200">
+                                  ⏳ پاسخنامه دست‌نویس شما ارسال شده و در انتظار تصحیح و ثبت نمره توسط دبیر است.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {submission.teacherFeedback && (
+                            <div className="p-2 bg-white/90 rounded-lg border border-emerald-300 text-slate-700 mt-1.5 flex items-start gap-1.5">
+                              <MessageSquare className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                              <div>
+                                <strong className="font-bold text-slate-900">بازخورد دبیر: </strong>
+                                <span>{submission.teacherFeedback}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <span>تاریخ انتشار: {toPersianDigits(ex.shamsiDate)}</span>
+                        {ex.hasSchedule && ex.startTime && (
+                          <span className="text-indigo-600 font-bold">
+                            (مهلت ورود: {toPersianDigits(ex.startTime)} تا {toPersianDigits(ex.endTime || '۲۴:۰۰')})
+                          </span>
+                        )}
+                      </div>
 
                       {isSubmitted ? (
                         <button
                           type="button"
                           onClick={() => handleStartExam(ex)}
-                          className="px-4 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-xs rounded-xl cursor-pointer flex items-center gap-1.5"
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span>مشاهده نتیجه و پاسخنامه ارسال‌شده</span>
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>مشاهده کارنامه و بررسی پاسخنامه</span>
+                        </button>
+                      ) : !schedule.canStart ? (
+                        <button
+                          type="button"
+                          disabled
+                          title={schedule.message}
+                          className="px-4 py-2 bg-slate-100 text-slate-400 border border-slate-200 font-bold text-xs rounded-xl cursor-not-allowed flex items-center justify-center gap-1.5"
+                        >
+                          <Lock className="w-4 h-4 text-slate-400" />
+                          <span>{schedule.badge || 'خارج از بازه مجاز ورود'}</span>
                         </button>
                       ) : (
                         <button
@@ -644,7 +920,7 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
                             }
                             handleStartExam(ex);
                           }}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
                         >
                           <FileQuestion className="w-4 h-4" />
                           <span>شروع آزمون با تایمر</span>
