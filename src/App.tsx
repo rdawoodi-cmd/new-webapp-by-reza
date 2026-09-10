@@ -197,15 +197,24 @@ export default function App() {
   };
 
   // Student Roster Handlers
-  const handleAddStudent = (firstName: string, lastName: string, className: string, code?: string) => {
+  const handleAddStudent = (
+    firstName: string,
+    lastName: string,
+    className: string,
+    code?: string,
+    fatherName?: string,
+    mobile?: string
+  ) => {
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
     const newSt: StudentProfile = {
       id: `st-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: fullName || firstName.trim(), // fallback if only one name is provided (e.g. from bulk add logic changes)
+      name: fullName || firstName.trim(),
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       className,
       code: code?.trim(),
+      fatherName: fatherName?.trim(),
+      mobile: mobile?.trim(),
       createdAt: new Date().toISOString(),
     };
 

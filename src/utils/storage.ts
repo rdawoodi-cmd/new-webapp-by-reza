@@ -9,15 +9,16 @@ export interface FullAppState {
   exams: Exam[];
 }
 
-const STORAGE_KEY = 'smart_school_manager_v3_6';
+const STORAGE_KEY = 'smart_school_manager_v3_8';
 
 export function loadLocalState(): FullAppState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+    const initialStudents = getInitialStudents();
     if (!raw) {
       return {
         config: getInitialConfig(),
-        students: getInitialStudents(),
+        students: initialStudents,
         attendance: getInitialAttendance(),
         assignments: getInitialAssignments(),
         exams: getInitialExams(),
@@ -28,9 +29,33 @@ export function loadLocalState(): FullAppState {
     if (loadedConfig.schoolName === 'دبیرستان دوره اول نمونه دولتی شهید چمران') {
       loadedConfig.schoolName = 'دبیرستان امام خمینی سمیرم';
     }
+
+    // Merge initial students (especially Class "هشتم ب") with parsed students, avoiding duplicates by code or name
+    const existingStudents: StudentProfile[] = parsed.students || [];
+    const existingCodes = new Set(existingStudents.map(s => s.code).filter(Boolean));
+    const existingNames = new Set(existingStudents.map(s => s.name.trim()));
+
+    const mergedStudents = [...existingStudents];
+    initialStudents.forEach(st => {
+      if ((st.code && existingCodes.has(st.code)) || existingNames.has(st.name.trim())) {
+        // already exists, but ensure fatherName / mobile are present if missing
+        const idx = mergedStudents.findIndex(s => (st.code && s.code === st.code) || s.name.trim() === st.name.trim());
+        if (idx !== -1 && (!mergedStudents[idx].fatherName || !mergedStudents[idx].mobile)) {
+          mergedStudents[idx] = {
+            ...mergedStudents[idx],
+            fatherName: mergedStudents[idx].fatherName || st.fatherName,
+            code: mergedStudents[idx].code || st.code,
+            className: mergedStudents[idx].className === 'هفتم الف' && st.className === 'هشتم ب' ? st.className : mergedStudents[idx].className
+          };
+        }
+      } else {
+        mergedStudents.push(st);
+      }
+    });
+
     return {
       config: loadedConfig,
-      students: parsed.students || getInitialStudents(),
+      students: mergedStudents,
       attendance: parsed.attendance || getInitialAttendance(),
       assignments: parsed.assignments || getInitialAssignments(),
       exams: parsed.exams && parsed.exams.length > 0 ? parsed.exams : getInitialExams(),

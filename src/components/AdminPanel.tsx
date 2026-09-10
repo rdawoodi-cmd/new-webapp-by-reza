@@ -71,7 +71,7 @@ interface AdminPanelProps {
   onDeleteAssignment: (id: string) => void;
   onSaveGrade: (assignmentId: string, studentName: string, grade: GradeEntry) => void;
   onBatchGrades: (assignmentId: string, grades: Record<string, GradeEntry>) => void;
-  onAddStudent: (firstName: string, lastName: string, className: string, code?: string) => void;
+  onAddStudent: (firstName: string, lastName: string, className: string, code?: string, fatherName?: string, mobile?: string) => void;
   onDeleteStudent: (id: string) => void;
   onRestoreBackup: (jsonData: any) => void;
   onCreateExam?: (exam: Omit<Exam, 'id' | 'createdAt' | 'submissions'>) => void;
@@ -176,6 +176,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newStuFirstName, setNewStuFirstName] = useState('');
   const [newStuLastName, setNewStuLastName] = useState('');
   const [newStuCode, setNewStuCode] = useState('');
+  const [newStuFatherName, setNewStuFatherName] = useState('');
+  const [newStuMobile, setNewStuMobile] = useState('');
   const [bulkStuText, setBulkStuText] = useState('');
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [isExtractingAI, setIsExtractingAI] = useState(false);
@@ -1540,24 +1542,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">نام پدر:</label>
+                      <input
+                        type="text"
+                        value={newStuFatherName}
+                        onChange={(e) => setNewStuFatherName(e.target.value)}
+                        placeholder="مثال: محمد"
+                        className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">شماره دانش‌آموزی (اختیاری):</label>
+                      <input
+                        type="text"
+                        value={newStuCode}
+                        onChange={(e) => setNewStuCode(e.target.value)}
+                        placeholder="مثال: ۱۰۸"
+                        className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600"
+                      />
+                    </div>
+                  </div>
+
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">شماره دانش‌آموزی (اختیاری):</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">شماره موبایل شرکت در کلاس مجازی:</label>
                     <input
                       type="text"
-                      value={newStuCode}
-                      onChange={(e) => setNewStuCode(e.target.value)}
-                      placeholder="مثال: ۱۰۸"
-                      className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600"
+                      value={newStuMobile}
+                      onChange={(e) => setNewStuMobile(e.target.value)}
+                      placeholder="مثال: 09123456789"
+                      className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:outline-blue-600 font-mono"
                     />
                   </div>
 
                   <button
                     onClick={() => {
                       if (!newStuFirstName.trim() || !newStuLastName.trim()) return;
-                      onAddStudent(newStuFirstName.trim(), newStuLastName.trim(), stuClassFilter, newStuCode.trim());
+                      onAddStudent(
+                        newStuFirstName.trim(),
+                        newStuLastName.trim(),
+                        stuClassFilter,
+                        newStuCode.trim(),
+                        newStuFatherName.trim(),
+                        newStuMobile.trim()
+                      );
                       setNewStuFirstName('');
                       setNewStuLastName('');
                       setNewStuCode('');
+                      setNewStuFatherName('');
+                      setNewStuMobile('');
                     }}
                     className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                   >
@@ -1680,7 +1714,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                         <div>
                           <p className="font-bold text-slate-900 text-xs sm:text-sm">{st.name}</p>
-                          {st.code && <p className="text-[11px] text-slate-400">کد: {toPersianDigits(st.code)}</p>}
+                          <div className="flex flex-wrap gap-2 text-[11px] text-slate-500 mt-0.5">
+                            {st.fatherName && <span>پدر: <strong className="text-slate-700">{st.fatherName}</strong></span>}
+                            {st.code && <span>کد: <strong className="font-mono text-slate-700">{toPersianDigits(st.code)}</strong></span>}
+                            {st.mobile && <span>موبایل مجازی: <strong className="font-mono text-blue-700">{toPersianDigits(st.mobile)}</strong></span>}
+                          </div>
                         </div>
                       </div>
 

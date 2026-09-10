@@ -24,6 +24,8 @@ export interface StudentProfile {
   lastName?: string;
   className: string;
   code?: string;
+  fatherName?: string;
+  mobile?: string;
   notes?: string;
   createdAt: string;
 }
