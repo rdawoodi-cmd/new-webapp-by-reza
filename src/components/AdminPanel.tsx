@@ -32,7 +32,9 @@ import {
   HardDrive,
   GitBranch,
   ExternalLink,
-  FileQuestion
+  FileQuestion,
+  Smartphone,
+  ShieldAlert
 } from 'lucide-react';
 import { 
   AttendanceRecord, 
@@ -57,6 +59,8 @@ interface AdminPanelProps {
   students: StudentProfile[];
   exams?: Exam[];
   isAdminLoggedIn: boolean;
+  activeSubject?: string;
+  onSelectActiveSubject?: (subj: string) => void;
   onLogin: (pin: string) => boolean;
   onLogout: () => void;
   onUpdateConfig: (newConfig: AppConfig) => void;
@@ -82,6 +86,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   assignments,
   students,
   isAdminLoggedIn,
+  activeSubject: propActiveSubject,
+  onSelectActiveSubject,
   onLogin,
   onLogout,
   onUpdateConfig,
@@ -111,14 +117,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // Active Subject Selection for Teacher Desk (انتخاب درس در حال مدیریت دبیر)
   const [activeSubject, setActiveSubject] = useState<string>(() => {
+    if (propActiveSubject) return propActiveSubject;
     const saved = localStorage.getItem('teacher_active_subject');
     if (saved && (saved === 'all' || config.subjects.includes(saved))) return saved;
     return config.subjects[0] || 'فرهنگ و هنر';
   });
 
+  useEffect(() => {
+    if (propActiveSubject !== undefined && propActiveSubject !== activeSubject) {
+      setActiveSubject(propActiveSubject);
+      if (propActiveSubject !== 'all') {
+        setAssSubject(propActiveSubject);
+      }
+    }
+  }, [propActiveSubject]);
+
   const handleSelectActiveSubject = (subj: string) => {
     setActiveSubject(subj);
     localStorage.setItem('teacher_active_subject', subj);
+    if (onSelectActiveSubject) {
+      onSelectActiveSubject(subj);
+    }
     if (subj !== 'all') {
       setAssSubject(subj);
     }
@@ -260,14 +279,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     );
   }
 
-  // Active Assignment for Grading
-  const activeAss = assignments.find((a) => a.id === selectedAssId) || assignments[0];
+  // Filter Assignments by Active Subject
+  const subjectAssignments = assignments.filter((a) => {
+    if (activeSubject !== 'all' && a.subject !== activeSubject) return false;
+    return true;
+  });
 
-  // Filter Attendance
+  // Active Assignment for Grading
+  const activeAss = subjectAssignments.find((a) => a.id === selectedAssId) || subjectAssignments[0];
+
+  // Auto-switch selected assignment when activeSubject changes
+  useEffect(() => {
+    if (activeSubject !== 'all') {
+      const match = assignments.find((a) => a.subject === activeSubject);
+      if (match) {
+        setSelectedAssId(match.id);
+      }
+    }
+  }, [activeSubject, assignments]);
+
+  // Filter Attendance by search, class, and activeSubject
   const filteredAttendance = attendance.filter((r) => {
-    const matchesSearch = r.studentName.includes(attSearch) || r.subject.includes(attSearch);
+    const matchesSearch = 
+      r.studentName.includes(attSearch) || 
+      r.subject.includes(attSearch) || 
+      (r.eitaaId && r.eitaaId.includes(attSearch));
     const matchesClass = attClassFilter === 'all' || r.className === attClassFilter;
-    return matchesSearch && matchesClass;
+    const matchesSubject = activeSubject === 'all' || r.subject === activeSubject;
+    return matchesSearch && matchesClass && matchesSubject;
+  });
+
+  // Identify duplicate Eitaa IDs or Device IDs across filtered attendance (especially multiple names per ID)
+  const attEitaaCounts = new Map<string, number>();
+  const attDeviceCounts = new Map<string, number>();
+  const attEitaaToNames = new Map<string, Set<string>>();
+  const attDeviceToNames = new Map<string, Set<string>>();
+
+  filteredAttendance.forEach((r) => {
+    const studentClean = r.studentName.trim();
+    if (r.eitaaId && r.eitaaId.trim()) {
+      const key = r.eitaaId.trim().toLowerCase();
+      attEitaaCounts.set(key, (attEitaaCounts.get(key) || 0) + 1);
+      if (!attEitaaToNames.has(key)) {
+        attEitaaToNames.set(key, new Set());
+      }
+      attEitaaToNames.get(key)!.add(studentClean);
+    }
+    if (r.deviceId && r.deviceId.trim()) {
+      const key = r.deviceId.trim();
+      attDeviceCounts.set(key, (attDeviceCounts.get(key) || 0) + 1);
+      if (!attDeviceToNames.has(key)) {
+        attDeviceToNames.set(key, new Set());
+      }
+      attDeviceToNames.get(key)!.add(studentClean);
+    }
   });
 
   // Handle File Attachment for Assignment
@@ -617,8 +682,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
               <div>
-                <span className="text-xs text-slate-500 font-medium">کل رکوردهای حضور</span>
-                <p className="text-2xl font-black text-blue-600 mt-1">{toPersianDigits(attendance.length)}</p>
+                <span className="text-xs text-slate-500 font-medium">
+                  {activeSubject === 'all' ? 'کل رکوردهای حضور' : `رکوردهای حضور (${activeSubject})`}
+                </span>
+                <p className="text-2xl font-black text-blue-600 mt-1">
+                  {toPersianDigits(
+                    attendance.filter((r) => activeSubject === 'all' || r.subject === activeSubject).length
+                  )}
+                </p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                 <UserCheck className="w-5 h-5" />
@@ -637,9 +708,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
               <div>
-                <span className="text-xs text-slate-500 font-medium">حاضرین امروز</span>
+                <span className="text-xs text-slate-500 font-medium">حاضرین امروز {activeSubject !== 'all' ? `(${activeSubject})` : ''}</span>
                 <p className="text-2xl font-black text-amber-600 mt-1">
-                  {toPersianDigits(attendance.filter((r) => r.shamsiDate === getTodayShamsi().dateString).length)}
+                  {toPersianDigits(
+                    attendance.filter(
+                      (r) =>
+                        r.shamsiDate === getTodayShamsi().dateString &&
+                        (activeSubject === 'all' || r.subject === activeSubject)
+                    ).length
+                  )}
                 </p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -655,7 +732,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="جستجوی نام دانش‌آموز..."
+                  placeholder="جستجوی نام یا شناسه ایتا..."
                   value={attSearch}
                   onChange={(e) => setAttSearch(e.target.value)}
                   className="w-full text-xs pr-9 pl-3 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-blue-600"
@@ -678,7 +755,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
-                onClick={() => exportAttendanceToCSV(attendance)}
+                onClick={() => exportAttendanceToCSV(attendance.filter((r) => activeSubject === 'all' || r.subject === activeSubject))}
                 className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-2 rounded-xl transition-colors cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4" />
@@ -719,42 +796,125 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <th className="py-3 px-4">درس</th>
                     <th className="py-3 px-4">تاریخ شمسی</th>
                     <th className="py-3 px-4">ساعت ثبت</th>
+                    <th className="py-3 px-4">حساب ایتا / شناسه دستگاه</th>
                     <th className="py-3 px-4 w-16 text-center">عملیات</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredAttendance.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-8 text-slate-400">
+                      <td colSpan={8} className="text-center py-8 text-slate-400">
                         رکوردی برای نمایش وجود ندارد
                       </td>
                     </tr>
                   ) : (
-                    filteredAttendance.map((r, idx) => (
-                      <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-3 text-center text-slate-400 font-medium">
-                          {toPersianDigits(idx + 1)}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{r.studentName}</td>
-                        <td className="py-3 px-4">
-                          <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium text-[11px]">
-                            {r.className}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-slate-700">{r.subject}</td>
-                        <td className="py-3 px-4 text-slate-600 font-mono">{toPersianDigits(r.shamsiDate)}</td>
-                        <td className="py-3 px-4 text-slate-600 font-mono">{toPersianDigits(r.timeString)}</td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => onDeleteAttendanceRecord(r.id)}
-                            className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors cursor-pointer"
-                            title="حذف این رکورد"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    filteredAttendance.map((r, idx) => {
+                      const eitaaKey = r.eitaaId?.trim().toLowerCase();
+                      const eitaaNames = eitaaKey ? attEitaaToNames.get(eitaaKey) : undefined;
+                      const isMultiStudentEitaa = !!(eitaaNames && eitaaNames.size > 1);
+                      const isEitaaDup = !!(eitaaKey && (attEitaaCounts.get(eitaaKey) || 0) > 1);
+
+                      const devKey = r.deviceId?.trim();
+                      const devNames = devKey ? attDeviceToNames.get(devKey) : undefined;
+                      const isMultiStudentDev = !!(devNames && devNames.size > 1);
+                      const isDeviceDup = !!(devKey && (attDeviceCounts.get(devKey) || 0) > 1);
+
+                      const isDuplicate = isMultiStudentEitaa || isEitaaDup || isMultiStudentDev || isDeviceDup;
+
+                      return (
+                        <tr 
+                          key={r.id} 
+                          className={`transition-colors ${
+                            isMultiStudentEitaa || isMultiStudentDev 
+                              ? 'bg-rose-100/60 hover:bg-rose-100/90 border-b border-rose-300 font-medium' 
+                              : isDuplicate 
+                                ? 'bg-rose-50/50 hover:bg-rose-50' 
+                                : 'hover:bg-slate-50'
+                          }`}
+                        >
+                          <td className="py-3 px-3 text-center text-slate-400 font-medium">
+                            {toPersianDigits(idx + 1)}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            <div className="flex items-center gap-1.5">
+                              <span>{r.studentName}</span>
+                              {isMultiStudentEitaa && (
+                                <span className="text-[10px] bg-rose-600 text-white font-bold px-1.5 py-0.2 rounded-sm" title="این حساب ایتا برای چند نام ثبت شده">
+                                  تکراری
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium text-[11px]">
+                              {r.className}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">{r.subject}</td>
+                          <td className="py-3 px-4 text-slate-600 font-mono">{toPersianDigits(r.shamsiDate)}</td>
+                          <td className="py-3 px-4 text-slate-600 font-mono">{toPersianDigits(r.timeString)}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col gap-1 items-start">
+                              <div
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono font-medium transition-colors ${
+                                  isMultiStudentEitaa
+                                    ? 'bg-rose-200 text-rose-950 border-rose-400 font-black shadow-2xs'
+                                    : isDuplicate
+                                      ? 'bg-rose-100 text-rose-900 border-rose-300 font-bold'
+                                      : 'bg-white text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                <Smartphone className={`w-3.5 h-3.5 ${isDuplicate ? 'text-rose-600' : 'text-slate-500'}`} />
+                                <span dir="ltr">
+                                  {r.eitaaId ? `${r.eitaaId}` : (r.deviceId ? `دستگاه: ${r.deviceId.substring(0, 8)}` : 'نامشخص')}
+                                </span>
+                              </div>
+
+                              {/* برچسب هشدار تقلب یا ثبت چندباره */}
+                              {isMultiStudentEitaa && eitaaNames && (
+                                <span
+                                  className="bg-rose-600 text-white font-sans text-[10.5px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs"
+                                  title={`این حساب ایتا توسط ${toPersianDigits(eitaaNames.size)} نام مختلف استفاده شده است: ${Array.from(eitaaNames).join(' و ')}`}
+                                >
+                                  <ShieldAlert className="w-3 h-3 shrink-0" />
+                                  <span>
+                                    هشدار: ثبت برای {toPersianDigits(eitaaNames.size)} نام با همین اکانت ایتا ({Array.from(eitaaNames).join('، ')})
+                                  </span>
+                                </span>
+                              )}
+
+                              {!isMultiStudentEitaa && isEitaaDup && (
+                                <span
+                                  className="bg-rose-500 text-white font-sans text-[10.5px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                                  title="ثبت چندباره با همین اکانت"
+                                >
+                                  <ShieldAlert className="w-3 h-3 shrink-0" />
+                                  <span>ثبت مکرر با همین حساب ایتا</span>
+                                </span>
+                              )}
+
+                              {!isMultiStudentEitaa && !isEitaaDup && isMultiStudentDev && devNames && (
+                                <span
+                                  className="bg-amber-600 text-white font-sans text-[10.5px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                                >
+                                  <ShieldAlert className="w-3 h-3 shrink-0" />
+                                  <span>گوشی مشترک ({toPersianDigits(devNames.size)} دانش‌آموز)</span>
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={() => onDeleteAttendanceRecord(r.id)}
+                              className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors cursor-pointer"
+                              title="حذف این رکورد"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -1023,9 +1183,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* ۳. تب نمرات و بازخورد تفکیکی */}
       {subTab === 'grades' && (
         <div className="space-y-4">
-          {assignments.length === 0 ? (
+          {subjectAssignments.length === 0 ? (
             <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center text-slate-500 text-xs">
-              لطفاً ابتدا از تب «تکالیف» حداقل یک تکلیف ایجاد نمایید تا امکان نمره‌دهی به آن فراهم شود.
+              {activeSubject !== 'all'
+                ? `هیچ تکلیفی برای درس «${activeSubject}» تعریف نشده است. لطفاً از تب «تکالیف» ابتدا برای این درس تکلیف ثبت کنید یا فیلتر درس را تغییر دهید.`
+                : 'لطفاً ابتدا از تب «تکالیف» حداقل یک تکلیف ایجاد نمایید تا امکان نمره‌دهی به آن فراهم شود.'}
             </div>
           ) : (
             <>
@@ -1038,9 +1200,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) => setSelectedAssId(e.target.value)}
                     className="text-xs sm:text-sm font-bold border border-slate-300 rounded-xl px-3 py-2 bg-white focus:outline-blue-600 cursor-pointer min-w-[220px]"
                   >
-                    {assignments.map((a) => (
+                    {subjectAssignments.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.title} ({a.className})
+                        {a.title} ({a.className} - {a.subject})
                       </option>
                     ))}
                   </select>

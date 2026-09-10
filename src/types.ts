@@ -13,6 +13,8 @@ export interface AttendanceRecord {
   timeString: string;
   timestamp: string; // ISO string
   notes?: string;
+  eitaaId?: string; // حساب یا شناسه ایتا / شماره همراه
+  deviceId?: string; // شناسه منحصر‌به‌فرد دستگاه/گوشی
 }
 
 export interface StudentProfile {
@@ -76,6 +78,8 @@ export interface ExamSubmission {
   className: string;
   submittedAt: string;
   timeSpentSeconds?: number;
+  eitaaId?: string; // حساب یا شناسه ایتا / شماره همراه
+  deviceId?: string; // شناسه منحصر‌به‌فرد دستگاه/گوشی
   // برای آزمون تشریحی:
   photoAnswer?: string; // تصویر برگه دست‌نویس دانش‌آموز (Data URL)
   photoAnswerName?: string;

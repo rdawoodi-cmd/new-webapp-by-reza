@@ -20,6 +20,8 @@ interface NavbarProps {
   currentTimeString: string;
   currentDateString: string;
   isAdminLoggedIn: boolean;
+  activeSubject: string;
+  onSelectActiveSubject: (subj: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -29,6 +31,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentTimeString,
   currentDateString,
   isAdminLoggedIn,
+  activeSubject,
+  onSelectActiveSubject,
 }) => {
   return (
     <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs no-print">
@@ -106,17 +110,49 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>تکالیف و نمرات دانش‌آموز</span>
             </button>
 
-            <button
-              onClick={() => setActiveTab('admin')}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+            {/* دکمه پنل دبیر و لیست کشویی انتخاب درس به عنوان زیرمجموعه یکپارچه آن */}
+            <div
+              className={`inline-flex items-center rounded-lg p-0.5 transition-all ${
                 activeTab === 'admin'
                   ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-slate-700 hover:text-blue-700'
+                  : 'bg-slate-200/80 text-slate-700 hover:bg-slate-200'
               }`}
             >
-              {isAdminLoggedIn ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-              <span>پنل دبیر {isAdminLoggedIn && '(فعال)'}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('admin')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  activeTab === 'admin' ? 'text-white' : 'text-slate-700 hover:text-blue-700'
+                }`}
+              >
+                {isAdminLoggedIn ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                <span>پنل دبیر {isAdminLoggedIn && '(فعال)'}</span>
+              </button>
+
+              <div className="flex items-center pl-1 pr-1 border-r border-slate-300/80">
+                <select
+                  id="navbar-subject-select"
+                  value={activeSubject}
+                  onChange={(e) => {
+                    onSelectActiveSubject(e.target.value);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`text-xs font-bold rounded-md px-2 py-1 cursor-pointer focus:outline-hidden transition-colors ${
+                    activeTab === 'admin'
+                      ? 'bg-blue-700 text-white border border-blue-400/50 hover:bg-blue-800'
+                      : 'bg-white text-slate-800 border border-slate-300 hover:border-slate-400 shadow-2xs'
+                  }`}
+                  title="انتخاب درس در حال مدیریت دبیر"
+                >
+                  <option value="all" className="text-slate-900 bg-white">همه درس‌ها</option>
+                  {config.subjects.map((sub) => (
+                    <option key={sub} value={sub} className="text-slate-900 bg-white">
+                      درس {sub}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <button
               onClick={() => setActiveTab('app-info')}

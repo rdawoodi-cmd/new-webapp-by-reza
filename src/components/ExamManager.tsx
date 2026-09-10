@@ -23,10 +23,13 @@ import {
   Sparkles,
   BookOpen,
   Pencil,
-  Filter
+  Filter,
+  Smartphone,
+  ShieldAlert
 } from 'lucide-react';
 import { Exam, QuizQuestion, ExamSubmission, AppConfig } from '../types';
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
+import { sounds } from '../utils/sound';
 import confetti from 'canvas-confetti';
 
 interface ExamManagerProps {
@@ -233,10 +236,17 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
 
       onUpdateExam(updated);
 
+      try {
+        sounds.playCheer();
+      } catch (err) {}
+
       setNotice({
-        title: 'ویرایش موفقیت‌آمیز آزمون!',
-        desc: `مشخصات آزمون «${title.trim()}» برای کلاس (${targetClass}) و درس (${subject}) با موفقیت به‌روزرسانی و ذخیره شد.`
+        title: 'تغییرات آزمون ذخیره شد!',
+        desc: `مشخصات و سوالات آزمون «${title.trim()}» برای کلاس (${targetClass}) و درس (${subject}) با موفقیت به‌روزرسانی و ذخیره گردید.`
       });
+
+      // هشدار به دبیر جهت اطمینان از ذخیره شدن تغییرات
+      alert(`تغییرات آزمون «${title.trim()}» با موفقیت ذخیره شد.`);
     } else {
       const today = getTodayShamsi();
       onCreateExam({
@@ -919,69 +929,146 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
             </button>
           </div>
 
-          {Object.keys(selectedExam.submissions || {}).length === 0 ? (
-            <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl">
-              هنوز هیچ دانش‌آموزی پاسخی برای این آزمون ارسال نکرده است. به محض ارسال توسط دانش‌آموز، تصویر پاسخنامه یا درصد تستی در اینجا نمایش داده خواهد شد.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {(Object.values(selectedExam.submissions) as ExamSubmission[]).map((sub) => (
-                <div
-                  key={sub.id}
-                  className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h5 className="font-extrabold text-sm text-slate-900">{sub.studentName}</h5>
-                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-medium">
-                        کلاس {sub.className}
-                      </span>
-                      <span className="text-[11px] text-slate-400 font-mono">
-                        ارسال در: {toPersianDigits(sub.submittedAt)}
-                      </span>
-                    </div>
+          {(() => {
+            const subsList = (Object.values(selectedExam.submissions || {}) as ExamSubmission[]);
+            if (subsList.length === 0) {
+              return (
+                <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-xl">
+                  هنوز هیچ دانش‌آموزی پاسخی برای این آزمون ارسال نکرده است. به محض ارسال توسط دانش‌آموز، تصویر پاسخنامه یا درصد تستی در اینجا نمایش داده خواهد شد.
+                </div>
+              );
+            }
 
-                    {/* If multiple choice */}
-                    {selectedExam.type === 'multiple-choice' && (
-                      <div className="flex items-center gap-2.5 text-xs pt-1">
-                        <span className="font-black text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
-                          نمره تستی: {toPersianDigits(sub.scorePercent ?? 0)}٪
-                        </span>
-                        <span className="text-emerald-600 font-bold">
-                          ✓ {toPersianDigits(sub.correctCount ?? 0)} درست
-                        </span>
-                        <span className="text-rose-600 font-bold">
-                          ✗ {toPersianDigits(sub.wrongCount ?? 0)} نادرست
-                        </span>
-                        <span className="text-slate-500">
-                          - {toPersianDigits(sub.unansweredCount ?? 0)} نزده
-                        </span>
-                      </div>
-                    )}
+            // Identify duplicate Eitaa IDs or Device IDs
+            const eitaaCounts = new Map<string, number>();
+            const deviceCounts = new Map<string, number>();
+            const eitaaToNames = new Map<string, Set<string>>();
+            const deviceToNames = new Map<string, Set<string>>();
 
-                    {/* If descriptive photo answer */}
-                    {selectedExam.type === 'descriptive' && (
-                      <div className="flex items-center gap-2 pt-1 text-xs">
-                        {sub.photoAnswer ? (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewPhoto({ studentName: sub.studentName, photoUrl: sub.photoAnswer! })}
-                            className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer"
-                          >
-                            <ImageIcon className="w-3.5 h-3.5" />
-                            <span>مشاهده تصویر برگه پاسخنامه ارسالی</span>
-                          </button>
-                        ) : (
-                          <span className="text-slate-400">عکس ارسال نشده</span>
-                        )}
-                        {sub.teacherScore && (
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
-                            نمره دبیر: {toPersianDigits(sub.teacherScore)}
+            subsList.forEach((sub) => {
+              const cleanName = sub.studentName.trim();
+              if (sub.eitaaId && sub.eitaaId.trim()) {
+                const key = sub.eitaaId.trim().toLowerCase();
+                eitaaCounts.set(key, (eitaaCounts.get(key) || 0) + 1);
+                if (!eitaaToNames.has(key)) {
+                  eitaaToNames.set(key, new Set());
+                }
+                eitaaToNames.get(key)!.add(cleanName);
+              }
+              if (sub.deviceId && sub.deviceId.trim()) {
+                const key = sub.deviceId.trim();
+                deviceCounts.set(key, (deviceCounts.get(key) || 0) + 1);
+                if (!deviceToNames.has(key)) {
+                  deviceToNames.set(key, new Set());
+                }
+                deviceToNames.get(key)!.add(cleanName);
+              }
+            });
+
+            return (
+              <div className="space-y-3">
+                {subsList.map((sub) => {
+                  const eKey = sub.eitaaId?.trim().toLowerCase();
+                  const eNames = eKey ? eitaaToNames.get(eKey) : undefined;
+                  const isMultiStudentEitaa = !!(eNames && eNames.size > 1);
+                  const isEitaaDup = !!(eKey && (eitaaCounts.get(eKey) || 0) > 1);
+
+                  const dKey = sub.deviceId?.trim();
+                  const dNames = dKey ? deviceToNames.get(dKey) : undefined;
+                  const isMultiStudentDev = !!(dNames && dNames.size > 1);
+                  const isDeviceDup = !!(dKey && (deviceCounts.get(dKey) || 0) > 1);
+
+                  const isSuspicious = isMultiStudentEitaa || isEitaaDup || isMultiStudentDev || isDeviceDup;
+
+                  return (
+                    <div
+                      key={sub.id}
+                      className={`border rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all ${
+                        isMultiStudentEitaa
+                          ? 'bg-rose-100/70 border-rose-400 font-medium'
+                          : isSuspicious
+                            ? 'bg-rose-50/70 border-rose-300'
+                            : 'bg-slate-50 border-slate-200'
+                      }`}
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h5 className="font-extrabold text-sm text-slate-900">{sub.studentName}</h5>
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-medium">
+                            کلاس {sub.className}
                           </span>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            ارسال در: {toPersianDigits(sub.submittedAt)}
+                          </span>
+
+                          {/* شناسه ایتا یا دستگاه با علامت‌گذاری قرمز در صورت تکراری بودن */}
+                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border text-xs font-mono font-medium ${
+                            isMultiStudentEitaa
+                              ? 'bg-rose-200 text-rose-950 border-rose-400 font-black'
+                              : isSuspicious
+                                ? 'bg-rose-100 text-rose-900 border-rose-300 font-bold'
+                                : 'bg-white text-slate-700 border-slate-200'
+                          }`}>
+                            <Smartphone className={`w-3.5 h-3.5 ${isSuspicious ? 'text-rose-600' : 'text-slate-500'}`} />
+                            <span dir="ltr">
+                              {sub.eitaaId ? `${sub.eitaaId}` : (sub.deviceId ? `دستگاه: ${sub.deviceId.substring(0, 8)}` : 'شناسه ثبت‌نشده')}
+                            </span>
+                            {isMultiStudentEitaa && eNames && (
+                              <span className="bg-rose-600 text-white font-sans text-[10.5px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3" />
+                                <span>هشدار تقلب: آزمون با {toPersianDigits(eNames.size)} نام مختلف با همین اکانت ایتا ({Array.from(eNames).join(' و ')})</span>
+                              </span>
+                            )}
+                            {!isMultiStudentEitaa && isSuspicious && (
+                              <span className="bg-rose-500 text-white font-sans text-[10.5px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <ShieldAlert className="w-3 h-3" />
+                                <span>اکانت یا شناسه تکراری</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* If multiple choice */}
+                        {selectedExam.type === 'multiple-choice' && (
+                          <div className="flex items-center gap-2.5 text-xs pt-1">
+                            <span className="font-black text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                              نمره تستی: {toPersianDigits(sub.scorePercent ?? 0)}٪
+                            </span>
+                            <span className="text-emerald-600 font-bold">
+                              ✓ {toPersianDigits(sub.correctCount ?? 0)} درست
+                            </span>
+                            <span className="text-rose-600 font-bold">
+                              ✗ {toPersianDigits(sub.wrongCount ?? 0)} نادرست
+                            </span>
+                            <span className="text-slate-500">
+                              - {toPersianDigits(sub.unansweredCount ?? 0)} نزده
+                            </span>
+                          </div>
+                        )}
+
+                        {/* If descriptive photo answer */}
+                        {selectedExam.type === 'descriptive' && (
+                          <div className="flex items-center gap-2 pt-1 text-xs">
+                            {sub.photoAnswer ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewPhoto({ studentName: sub.studentName, photoUrl: sub.photoAnswer! })}
+                                className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 font-bold underline cursor-pointer"
+                              >
+                                <ImageIcon className="w-3.5 h-3.5" />
+                                <span>مشاهده تصویر برگه پاسخنامه ارسالی</span>
+                              </button>
+                            ) : (
+                              <span className="text-slate-400">عکس ارسال نشده</span>
+                            )}
+                            {sub.teacherScore && (
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
+                                نمره دبیر: {toPersianDigits(sub.teacherScore)}
+                              </span>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
                   {/* Teacher Grading Box for Descriptive */}
                   {selectedExam.type === 'descriptive' && (
@@ -1015,11 +1102,13 @@ export const ExamManager: React.FC<ExamManagerProps> = ({
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
+    </div>
+  )}
 
       {/* Fullscreen Photo Modal */}
       {previewPhoto && (

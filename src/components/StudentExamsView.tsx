@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Exam, QuizQuestion, ExamSubmission, AppConfig } from '../types';
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
+import { getDeviceId, getSavedEitaaId } from '../utils/deviceIdentifier';
 import confetti from 'canvas-confetti';
 
 interface StudentExamsViewProps {
@@ -138,6 +139,8 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const today = getTodayShamsi();
+    const savedEitaa = getSavedEitaaId();
+    const deviceId = getDeviceId();
 
     const submission: ExamSubmission = {
       id: `sub-${Date.now()}`,
@@ -147,6 +150,8 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
       submittedAt: `${today.dateString} - ساعت ${timeStr}`,
       photoAnswer: photoData,
       photoAnswerName: photoName || 'پاسخنامه.jpg',
+      eitaaId: savedEitaa || undefined,
+      deviceId: deviceId || undefined,
     };
 
     onSubmitExam(activeExam.id, submission);
@@ -196,6 +201,8 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     const today = getTodayShamsi();
+    const savedEitaa = getSavedEitaaId();
+    const deviceId = getDeviceId();
 
     const submission: ExamSubmission = {
       id: `sub-${Date.now()}`,
@@ -208,6 +215,8 @@ export const StudentExamsView: React.FC<StudentExamsViewProps> = ({
       correctCount: correct,
       wrongCount: wrong,
       unansweredCount: unanswered,
+      eitaaId: savedEitaa || undefined,
+      deviceId: deviceId || undefined,
     };
 
     onSubmitExam(activeExam.id, submission);

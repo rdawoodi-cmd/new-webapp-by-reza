@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle2, 
   GraduationCap, 
@@ -10,17 +10,26 @@ import {
   Printer,
   Copy,
   Check,
-  AlertCircle
+  AlertCircle,
+  Smartphone,
+  ShieldCheck
 } from 'lucide-react';
 import { AppConfig, StudentProfile } from '../types';
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
 import { sounds } from '../utils/sound';
+import { getDeviceId, detectEitaaUser, EitaaUserInfo, getSavedEitaaId } from '../utils/deviceIdentifier';
 import confetti from 'canvas-confetti';
 
 interface StudentAttendanceViewProps {
   config: AppConfig;
   students: StudentProfile[];
-  onSubmitAttendance: (name: string, className: string, subject: string) => { success: boolean; message: string; date: string; time: string };
+  onSubmitAttendance: (
+    name: string,
+    className: string,
+    subject: string,
+    eitaaId?: string,
+    deviceId?: string
+  ) => { success: boolean; message: string; date: string; time: string };
 }
 
 export const StudentAttendanceView: React.FC<StudentAttendanceViewProps> = ({
@@ -37,6 +46,17 @@ export const StudentAttendanceView: React.FC<StudentAttendanceViewProps> = ({
   const [studentName, setStudentName] = useState<string>(() => {
     return localStorage.getItem('last_student_name') || '';
   });
+  const [eitaaInfo, setEitaaInfo] = useState<EitaaUserInfo>(() => {
+    return detectEitaaUser();
+  });
+
+  useEffect(() => {
+    const info = detectEitaaUser();
+    setEitaaInfo(info);
+    if (!studentName && info.fullName) {
+      setStudentName(info.fullName);
+    }
+  }, []);
 
   const [receipt, setReceipt] = useState<{
     studentName: string;
@@ -44,6 +64,7 @@ export const StudentAttendanceView: React.FC<StudentAttendanceViewProps> = ({
     subject: string;
     date: string;
     time: string;
+    eitaaId?: string;
   } | null>(null);
 
   const [isCopied, setIsCopied] = useState(false);
@@ -74,8 +95,10 @@ export const StudentAttendanceView: React.FC<StudentAttendanceViewProps> = ({
 
     setErrorMsg('');
     localStorage.setItem('last_student_name', cleanName);
+    const deviceId = getDeviceId();
+    const finalEitaaId = eitaaInfo.displayId || getSavedEitaaId() || deviceId;
 
-    const result = onSubmitAttendance(cleanName, selectedClass, selectedSubject);
+    const result = onSubmitAttendance(cleanName, selectedClass, selectedSubject, finalEitaaId, deviceId);
 
     if (result.success) {
       sounds.playCheer();
@@ -95,6 +118,7 @@ export const StudentAttendanceView: React.FC<StudentAttendanceViewProps> = ({
         subject: selectedSubject,
         date: result.date,
         time: result.time,
+        eitaaId: finalEitaaId,
       });
     }
   };
@@ -281,6 +305,68 @@ export const StudentAttendanceView: React.FC<StudentAttendanceViewProps> = ({
                     {st.name}
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* مشخصات حساب کاربری ایتا به صورت خودکار از SDK برنامک ایتا */}
+          <div className="pt-2">
+            {eitaaInfo.isEitaaDetected ? (
+              <div className="bg-emerald-50/90 border border-emerald-300 rounded-2xl p-4 text-emerald-950 space-y-2.5 shadow-2xs">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-emerald-900">
+                        احراز هویت هوشمند برنامک ایتا (خودکار)
+                      </h4>
+                      <p className="text-[11px] text-emerald-700">
+                        اطلاعات حساب ایتا مستقیماً از اپلیکیشن استخراج شد و نیازی به تایپ دستی نیست.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-full shrink-0">
+                    ✓ متصل به ایتا
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <div className="bg-white rounded-xl p-2.5 border border-emerald-200 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">شناسه عددی ایتا:</span>
+                    <span className="font-mono font-bold text-slate-900" dir="ltr">
+                      {eitaaInfo.id ? toPersianDigits(eitaaInfo.id) : 'تولید خودکار'}
+                    </span>
+                  </div>
+
+                  <div className="bg-white rounded-xl p-2.5 border border-emerald-200 flex items-center justify-between text-xs">
+                    <span className="text-slate-500 font-medium">نام کاربری (یوزرنیم):</span>
+                    <span className="font-mono font-bold text-slate-900" dir="ltr">
+                      {eitaaInfo.username ? `@${eitaaInfo.username}` : (eitaaInfo.fullName || 'ثبت با شناسه عددی')}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[10.5px] text-emerald-800 flex items-center gap-1.5 pt-0.5">
+                  <span>🔒</span>
+                  <span>این شناسه یکتا همراه با نام وارد شده ذخیره می‌شود تا در پنل دبیر اصالت حضور ثبت گردد.</span>
+                </p>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Smartphone className="w-4 h-4 text-blue-600" />
+                    <span>شناسه اختصاصی دستگاه:</span>
+                  </span>
+                  <span className="text-[11px] font-mono font-bold bg-white border border-slate-200 px-2.5 py-0.5 rounded-md text-slate-800">
+                    {eitaaInfo.displayId}
+                  </span>
+                </div>
+                <p className="text-[10.5px] text-slate-500 leading-relaxed">
+                  💡 <strong>توجه:</strong> وقتی دانش‌آموزان روی لینک ارسالی در گروه ایتا کلیک کنند، برنامک به طور خودکار آیدی و نام کاربری ایتا را بدون نیاز به ورود دستی شناسایی و ثبت می‌نماید.
+                </p>
               </div>
             )}
           </div>

@@ -1,12 +1,41 @@
 @import "tailwindcss";
 
 @layer base {
+  html {
+    font-size: 18px;
+    -webkit-text-size-adjust: 100%;
+  }
+
   body {
-    font-family: 'B Nazanin', 'BNazanin', 'B Mitra', 'BMitra', 'Shabnam', 'Sahel', 'Samim', 'Vazirmatn', 'Markazi Text', 'Amiri', 'Noto Naskh Arabic', Tahoma, system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    line-height: 1.7;
+  }
+
+  body, button, input, select, textarea, *, ::before, ::after {
+    font-family: 'B Nazanin', 'BNazanin', 'B Mitra', 'BMitra', 'Sahel', 'Shabnam', 'Samim', 'Vazirmatn', 'Markazi Text', Tahoma, system-ui, sans-serif;
+  }
+
+  /* بهینه‌سازی خوانایی برچسب‌ها و فونت‌های ریز در نمایش فارسی */
+  .text-\[10px\], .text-\[10\.5px\], .text-\[11px\] {
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  input, select, textarea, button {
+    font-size: 0.92rem;
+  }
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 17.5px;
   }
 }
 
 @media print {
+  html {
+    font-size: 14px !important;
+  }
   .no-print {
     display: none !important;
   }

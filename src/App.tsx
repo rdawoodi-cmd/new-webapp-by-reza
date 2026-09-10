@@ -25,6 +25,18 @@ export default function App() {
     return sessionStorage.getItem('is_admin_logged_in') === 'true';
   });
 
+  // Active Subject for Teacher Workspace (درس در حال مدیریت دبیر)
+  const [activeSubject, setActiveSubject] = useState<string>(() => {
+    const saved = localStorage.getItem('teacher_active_subject');
+    if (saved && (saved === 'all' || appState.config.subjects.includes(saved))) return saved;
+    return appState.config.subjects[0] || 'فرهنگ و هنر';
+  });
+
+  const handleSelectActiveSubject = (subj: string) => {
+    setActiveSubject(subj);
+    localStorage.setItem('teacher_active_subject', subj);
+  };
+
   const [currentTime, setCurrentTime] = useState<string>(() => getCurrentTimeString());
   const [currentDate, setCurrentDate] = useState<string>(() => getTodayShamsi().dateString);
 
@@ -61,7 +73,9 @@ export default function App() {
   const handleStudentAttendanceSubmit = (
     studentName: string,
     className: string,
-    subject: string
+    subject: string,
+    eitaaId?: string,
+    deviceId?: string
   ) => {
     const today = getTodayShamsi();
     const timeNow = getCurrentTimeString();
@@ -75,6 +89,8 @@ export default function App() {
       shamsiDate: today.dateString,
       timeString: timeNow,
       timestamp: nowIso,
+      eitaaId: eitaaId?.trim() || undefined,
+      deviceId: deviceId || undefined,
     };
 
     setAppState((prev) => {
@@ -323,6 +339,8 @@ export default function App() {
         currentTimeString={currentTime}
         currentDateString={currentDate}
         isAdminLoggedIn={isAdminLoggedIn}
+        activeSubject={activeSubject}
+        onSelectActiveSubject={handleSelectActiveSubject}
       />
 
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
@@ -351,6 +369,8 @@ export default function App() {
             students={appState.students}
             exams={appState.exams || []}
             isAdminLoggedIn={isAdminLoggedIn}
+            activeSubject={activeSubject}
+            onSelectActiveSubject={handleSelectActiveSubject}
             onLogin={handleLogin}
             onLogout={handleLogout}
             onUpdateConfig={handleUpdateConfig}
