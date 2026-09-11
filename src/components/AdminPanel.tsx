@@ -172,7 +172,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [gradeNote, setGradeNote] = useState('');
 
   // Students Tab States
-  const [stuClassFilter, setStuClassFilter] = useState(config.classes[0] || 'هفتم الف');
+  const [stuClassFilter, setStuClassFilter] = useState(config.classes.includes('هشتم ب') ? 'هشتم ب' : (config.classes[0] || 'هشتم ب'));
   const [newStuFirstName, setNewStuFirstName] = useState('');
   const [newStuLastName, setNewStuLastName] = useState('');
   const [newStuCode, setNewStuCode] = useState('');
@@ -184,7 +184,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const aiFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Toolkit States: Random Picker
-  const [pickerClass, setPickerClass] = useState(config.classes[0] || 'هفتم الف');
+  const [pickerClass, setPickerClass] = useState(config.classes.includes('هشتم ب') ? 'هشتم ب' : (config.classes[0] || 'هشتم ب'));
   const [isPicking, setIsPicking] = useState(false);
   const [pickedStudent, setPickedStudent] = useState<StudentProfile | null>(null);
 

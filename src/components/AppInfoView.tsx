@@ -13,9 +13,7 @@ import {
   Cpu, 
   Calendar,
   Heart,
-  Laptop,
-  Download,
-  FileArchive
+  Laptop
 } from 'lucide-react';
 import { AppConfig } from '../types';
 import { APP_VERSION, APP_VERSION_FA, APP_BUILD_DATE_FA } from '../version';
@@ -132,34 +130,6 @@ export const AppInfoView: React.FC<AppInfoViewProps> = ({ config, onNavigateTab 
               <Mail className="w-4 h-4" />
               <span>ارسال پیام مستقیم به سازنده ({developerName})</span>
             </a>
-
-            {/* دانلود فایل زیپ */}
-            <div className="mt-2 pt-3 border-t border-slate-200/70">
-              <span className="block text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                <FileArchive className="w-4 h-4 text-emerald-600" />
-                <span>دانلود بسته پروژه (فایل ZIP):</span>
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <a
-                  href="./dist-v4.0.0.zip"
-                  download="dist-v4.0.0.zip"
-                  className="py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                  title="فایل‌های کامپایل‌شده آماده بارگذاری مستقیم روی هاست، گیت‌هاب پیجز یا نتلیفای"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>دانلود پکیج آماده هاست (dist)</span>
-                </a>
-                <a
-                  href="./project-v4.0.0.zip"
-                  download="project-v4.0.0.zip"
-                  className="py-2.5 px-3 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-                  title="سورس‌کد کامل پروژه به همراه فایل‌های توسعه"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>دانلود سورس‌کد کامل (Source)</span>
-                </a>
-              </div>
-            </div>
           </div>
         </div>
 

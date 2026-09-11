@@ -9,7 +9,7 @@ export interface FullAppState {
   exams: Exam[];
 }
 
-const STORAGE_KEY = 'smart_school_manager_v3_8';
+const STORAGE_KEY = 'smart_school_manager_v4_0';
 
 export function loadLocalState(): FullAppState {
   try {
@@ -26,26 +26,34 @@ export function loadLocalState(): FullAppState {
     }
     const parsed = JSON.parse(raw);
     const loadedConfig = { ...getInitialConfig(), ...(parsed.config || {}) };
+    loadedConfig.academicYear = '۱۴۰۵ - ۱۴۰۶';
     if (loadedConfig.schoolName === 'دبیرستان دوره اول نمونه دولتی شهید چمران') {
       loadedConfig.schoolName = 'دبیرستان امام خمینی سمیرم';
     }
 
-    // Merge initial students (especially Class "هشتم ب") with parsed students, avoiding duplicates by code or name
-    const existingStudents: StudentProfile[] = parsed.students || [];
-    const existingCodes = new Set(existingStudents.map(s => s.code).filter(Boolean));
-    const existingNames = new Set(existingStudents.map(s => s.name.trim()));
+    // Filter out dummy sample students, keep user created or 8-B students
+    const dummyNames = new Set([
+      'علی رضایی', 'محمد حسینی', 'سارا احمدی', 'امیرمهدی کریمی',
+      'فاطمه موسوی', 'پارسا صادقی', 'نیلوفر مرادی', 'حسین کاظمی'
+    ]);
 
-    const mergedStudents = [...existingStudents];
+    const rawStudents: StudentProfile[] = Array.isArray(parsed.students) && parsed.students.length > 0 
+      ? parsed.students.filter((s: StudentProfile) => !dummyNames.has(s.name.trim()))
+      : [];
+
+    const existingCodes = new Set(rawStudents.map(s => s.code).filter(Boolean));
+    const existingNames = new Set(rawStudents.map(s => s.name.trim()));
+
+    const mergedStudents = [...rawStudents];
     initialStudents.forEach(st => {
       if ((st.code && existingCodes.has(st.code)) || existingNames.has(st.name.trim())) {
-        // already exists, but ensure fatherName / mobile are present if missing
         const idx = mergedStudents.findIndex(s => (st.code && s.code === st.code) || s.name.trim() === st.name.trim());
-        if (idx !== -1 && (!mergedStudents[idx].fatherName || !mergedStudents[idx].mobile)) {
+        if (idx !== -1) {
           mergedStudents[idx] = {
             ...mergedStudents[idx],
             fatherName: mergedStudents[idx].fatherName || st.fatherName,
             code: mergedStudents[idx].code || st.code,
-            className: mergedStudents[idx].className === 'هفتم الف' && st.className === 'هشتم ب' ? st.className : mergedStudents[idx].className
+            className: 'هشتم ب'
           };
         }
       } else {
@@ -53,10 +61,13 @@ export function loadLocalState(): FullAppState {
       }
     });
 
+    // Remove dummy records from attendance
+    const attendance = (parsed.attendance || []).filter((a: AttendanceRecord) => !dummyNames.has(a.studentName.trim()));
+
     return {
       config: loadedConfig,
-      students: mergedStudents,
-      attendance: parsed.attendance || getInitialAttendance(),
+      students: mergedStudents.length > 0 ? mergedStudents : initialStudents,
+      attendance: attendance,
       assignments: parsed.assignments || getInitialAssignments(),
       exams: parsed.exams && parsed.exams.length > 0 ? parsed.exams : getInitialExams(),
     };
