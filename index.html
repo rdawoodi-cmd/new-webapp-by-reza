@@ -21,16 +21,6 @@
   </head>
   <body class="bg-slate-50 text-slate-900 antialiased font-['B_Nazanin','BNazanin','B_Mitra','BMitra','Shabnam','Sahel','Samim','Vazirmatn','Markazi_Text','Noto_Naskh_Arabic',Tahoma,sans-serif]">
     <div id="root"></div>
-    <script>
-      // Only redirect if uncompiled source HTML is being served on GitHub Pages root:
-      if (window.location.hostname.indexOf('github.io') !== -1 && !document.querySelector('script[src*="assets/index.js"]')) {
-        var base = window.location.pathname;
-        if (!base.endsWith('/')) base += '/';
-        if (base.indexOf('/docs/') === -1) {
-          window.location.replace(base + 'docs/');
-        }
-      }
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
