@@ -7,7 +7,8 @@ import {
   Calendar,
   Database,
   Lock,
-  Info
+  Info,
+  ShieldAlert
 } from 'lucide-react';
 import { MainTab, AppConfig } from '../types';
 import { toPersianDigits } from '../utils/persianDate';
@@ -20,6 +21,7 @@ interface NavbarProps {
   currentTimeString: string;
   currentDateString: string;
   isAdminLoggedIn: boolean;
+  isManagerLoggedIn: boolean;
   activeSubject: string;
   onSelectActiveSubject: (subj: string) => void;
 }
@@ -31,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentTimeString,
   currentDateString,
   isAdminLoggedIn,
+  isManagerLoggedIn,
   activeSubject,
   onSelectActiveSubject,
 }) => {
@@ -152,6 +155,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Info className="w-4 h-4 text-indigo-600" />
               <span>مشخصات برنامه</span>
+            </button>
+
+            {/* تب اختصاصی مدیریت سایت (تنظیمات، دروس، استقرار، رمزها و انتساب‌ها) */}
+            <button
+              onClick={() => setActiveTab('manager')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap border ${
+                activeTab === 'manager'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                  : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <ShieldAlert className="w-4 h-4" />
+              <span>پنل مدیریت سایت {isManagerLoggedIn && '(فعال)'}</span>
             </button>
           </div>
         </div>

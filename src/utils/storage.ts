@@ -25,7 +25,12 @@ export function loadLocalState(): FullAppState {
       };
     }
     const parsed = JSON.parse(raw);
-    const loadedConfig = { ...getInitialConfig(), ...(parsed.config || {}) };
+    const initialCfg = getInitialConfig();
+    const loadedConfig: AppConfig = { ...initialCfg, ...(parsed.config || {}) };
+    if (!loadedConfig.managerPin) loadedConfig.managerPin = initialCfg.managerPin;
+    if (!loadedConfig.teachers || loadedConfig.teachers.length === 0) loadedConfig.teachers = initialCfg.teachers;
+    if (!loadedConfig.classEitaaLinks) loadedConfig.classEitaaLinks = initialCfg.classEitaaLinks;
+    if (!loadedConfig.classSubjectEitaaLinks) loadedConfig.classSubjectEitaaLinks = initialCfg.classSubjectEitaaLinks || {};
     loadedConfig.academicYear = '۱۴۰۵ - ۱۴۰۶';
     if (loadedConfig.schoolName === 'دبیرستان دوره اول نمونه دولتی شهید چمران') {
       loadedConfig.schoolName = 'دبیرستان امام خمینی سمیرم';

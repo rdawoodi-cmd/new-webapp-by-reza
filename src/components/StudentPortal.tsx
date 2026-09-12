@@ -15,6 +15,7 @@ import { AppConfig, StudentProfile, Assignment, Exam, ExamSubmission } from '../
 import { toPersianDigits, getTodayShamsi } from '../utils/persianDate';
 import { sounds } from '../utils/sound';
 import { getDeviceId, detectEitaaUser, EitaaUserInfo, getSavedEitaaId } from '../utils/deviceIdentifier';
+import { getClassSubjectEitaaLink } from '../utils/eitaaHelper';
 import { StudentAssignmentsView } from './StudentAssignmentsView';
 
 interface StudentPortalProps {
@@ -114,6 +115,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   if (isLoggedIn) {
+    const eitaaLink = getClassSubjectEitaaLink(config, selectedClass, selectedSubject);
     return (
       <div className="space-y-6">
         {/* هدر پنل دانش‌آموز */}
@@ -137,18 +139,55 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
           </div>
           
-          <button
-            onClick={handleLogout}
-            className="flex items-center justify-center gap-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200 bg-white px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
-          >
-            <LogOut className="w-4 h-4" />
-            خروج از کلاس
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {eitaaLink ? (
+              <a
+                href={eitaaLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
+                title={`بازگشت به گروه چت ایتا (درس ${selectedSubject})`}
+              >
+                <span>🔙 برگشت به گروه چت ایتا ({selectedSubject})</span>
+              </a>
+            ) : (
+              <button
+                onClick={() => {
+                  try {
+                    const w = window as any;
+                    if (w.Eitaa?.WebApp?.close) {
+                      w.Eitaa.WebApp.close();
+                    } else if (w.Telegram?.WebApp?.close) {
+                      w.Telegram.WebApp.close();
+                    } else {
+                      alert('حاضری شما با موفقیت ثبت شد. می‌توانید این پنجره را ببندید و به گروه چت ایتا بازگردید.');
+                      handleLogout();
+                    }
+                  } catch {
+                    handleLogout();
+                  }
+                }}
+                className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
+                title="بستن برنامک و بازگشت به گروه چت ایتا"
+              >
+                <span>🔙 برگشت به گروه چت ایتا</span>
+              </button>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 border border-rose-200 bg-white px-4 py-2.5 rounded-xl transition-colors shrink-0 shadow-xs cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              خروج از کلاس
+            </button>
+          </div>
         </div>
 
-        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold shadow-xs">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-          <span>حضور شما در کلاس ثبت شد.</span>
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-xl flex items-center justify-between gap-2 text-sm font-bold shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            <span>حضور شما در کلاس {selectedClass} (درس {selectedSubject}) ثبت شد. برای بازگشت به گروه چت ایتا روی دکمه بالا کلیک کنید.</span>
+          </div>
         </div>
 
         {/* پنل تکالیف و آزمون‌ها */}
@@ -167,7 +206,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   }
 
   return (
-    <div className="max-w-md mx-auto relative">
+    <div className="max-w-md mx-auto relative space-y-4">
       <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden mb-6 transform transition-all hover:shadow-2xl">
         <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-5 sm:p-6 text-white text-center relative overflow-hidden">
           <div className="absolute inset-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>

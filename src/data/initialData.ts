@@ -22,14 +22,58 @@ export const DEFAULT_SUBJECTS = [
 export function getInitialConfig(): AppConfig {
   return {
     adminPin: '1234',
+    managerPin: '9876', // رمز پیش‌فرض پنل مدیریت سایت
     schoolName: 'دبیرستان امام خمینی سمیرم',
     teacherName: 'استاد داوودی',
     academicYear: '۱۴۰۵ - ۱۴۰۶',
     classes: DEFAULT_CLASSES,
     subjects: DEFAULT_SUBJECTS,
+    teachers: [
+      {
+        id: 'tch-1',
+        name: 'استاد داوودی',
+        username: 'dawoodi',
+        pin: '1234',
+        subject: 'فرهنگ و هنر',
+        allowedClasses: ['هشتم ب', 'هفتم ب', 'نهم ب'],
+      },
+      {
+        id: 'tch-2',
+        name: 'دبیر ریاضی',
+        username: 'riazi',
+        pin: '2233',
+        subject: 'ریاضی',
+        allowedClasses: ['هشتم ب', 'هفتم الف', 'هفتم ب'],
+      },
+      {
+        id: 'tch-3',
+        name: 'دبیر علوم تجربی',
+        username: 'oloom',
+        pin: '3344',
+        subject: 'علوم تجربی',
+        allowedClasses: ['هشتم ب'],
+      },
+    ],
+    classEitaaLinks: {
+      'هشتم ب': '',
+      'هفتم الف': '',
+      'هفتم ب': '',
+      'هشتم الف': '',
+      'نهم الف': '',
+      'نهم ب': '',
+    },
+    classSubjectEitaaLinks: {
+      'هشتم ب': {},
+      'هفتم الف': {},
+      'هفتم ب': {},
+      'هشتم الف': {},
+      'نهم الف': {},
+      'نهم ب': {},
+    },
     storageMode: 'local',
     supabaseUrl: 'https://dzbjznvdrrkfgycxqcnf.supabase.co',
     supabaseAnonKey: 'sb_publishable_hLm2YZ48fzg-IC_u3BHVSw_PKPVEz0L',
+    eitaaGroupLink: '',
   };
 }
 

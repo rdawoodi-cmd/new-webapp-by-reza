@@ -1,8 +1,17 @@
-export type Role = 'student' | 'admin';
+export type Role = 'student' | 'teacher' | 'manager';
 
-export type MainTab = 'student' | 'admin' | 'app-info';
+export type MainTab = 'student' | 'admin' | 'manager' | 'app-info';
 
-export type AdminSubTab = 'attendance' | 'assignments' | 'grades' | 'students' | 'toolkit' | 'settings';
+export type AdminSubTab = 'attendance' | 'assignments' | 'grades' | 'toolkit';
+
+export interface TeacherAccount {
+  id: string;
+  name: string; // نام دبیر (مثلا استاد داوودی)
+  username: string; // نام کاربری یا کد دبیر
+  pin: string; // رمز ورود اختصاصی دبیر
+  subject: string; // درسی که تدریس می‌کند و فقط به آن دسترسی دارد
+  allowedClasses?: string[]; // کلاس‌های مجاز (در صورت خالی بودن، همه کلاس‌ها)
+}
 
 export interface AttendanceRecord {
   id: string;
@@ -58,15 +67,20 @@ export interface Assignment {
 }
 
 export interface AppConfig {
-  adminPin: string; // default "1234"
+  adminPin: string; // رمز ورود عمومی دبیران (یا پیش‌فرض)
+  managerPin: string; // رمز ورود اختصاصی مدیر سایت (پیش‌فرض 9876 یا 12345)
   schoolName: string;
   teacherName: string;
   academicYear: string;
   classes: string[]; // default: ['هفتم الف', 'هفتم ب', 'هشتم الف', 'هشتم ب', 'نهم الف', 'نهم ب']
   subjects: string[]; // default: ['فرهنگ و هنر', 'ریاضی', 'علوم تجربی', 'ادبیات فارسی', 'زبان انگلیسی', 'پیام‌های آسمان']
+  teachers: TeacherAccount[]; // لیست دبیران و درس اختصاصی و رمز ورود هر کدام
+  classEitaaLinks: Record<string, string>; // className -> لینک پیش‌فرض یا عمومی
+  classSubjectEitaaLinks?: Record<string, Record<string, string>>; // className -> (subjectName -> eitaaLink)
   storageMode: 'local' | 'supabase';
   supabaseUrl?: string;
   supabaseAnonKey?: string;
+  eitaaGroupLink?: string; // لینک عمومی پشتیبان گروه چت ایتا
 }
 
 export interface QuizQuestion {

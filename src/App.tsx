@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { StudentPortal } from './components/StudentPortal';
 import { AdminPanel } from './components/AdminPanel';
+import { ManagerPanel } from './components/ManagerPanel';
 import { AppInfoView } from './components/AppInfoView';
 import { 
   MainTab, 
@@ -11,7 +12,8 @@ import {
   StudentProfile, 
   GradeEntry,
   Exam,
-  ExamSubmission
+  ExamSubmission,
+  TeacherAccount
 } from './types';
 import { loadLocalState, saveLocalState, FullAppState } from './utils/storage';
 import { getTodayShamsi, getCurrentTimeString, toPersianDigits } from './utils/persianDate';
@@ -23,6 +25,20 @@ export default function App() {
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
     return sessionStorage.getItem('is_admin_logged_in') === 'true';
   });
+  const [isManagerLoggedIn, setIsManagerLoggedIn] = useState<boolean>(() => {
+    return sessionStorage.getItem('is_manager_logged_in') === 'true';
+  });
+
+  // Logged-in Teacher Account (if logged in as a specific teacher)
+  const [currentTeacher, setCurrentTeacher] = useState<TeacherAccount | null>(() => {
+    const raw = sessionStorage.getItem('current_teacher_account');
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {}
+    }
+    return null;
+  });
 
   // Active Subject for Teacher Workspace (درس در حال مدیریت دبیر)
   const [activeSubject, setActiveSubject] = useState<string>(() => {
@@ -32,6 +48,11 @@ export default function App() {
   });
 
   const handleSelectActiveSubject = (subj: string) => {
+    // If a specific teacher is logged in, restrict changing to other subjects
+    if (currentTeacher && subj !== currentTeacher.subject) {
+      alert(`دسترسی محدود است: شما به عنوان دبیر درس «${currentTeacher.subject}» وارد شده‌اید و فقط مجاز به مشاهده همین درس هستید.`);
+      return;
+    }
     setActiveSubject(subj);
     localStorage.setItem('teacher_active_subject', subj);
   };
@@ -53,11 +74,27 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Admin Auth Handlers
+  // Admin / Teacher Auth Handlers
   const handleLogin = (pin: string): boolean => {
+    // Check if entered pin belongs to a configured teacher
+    const matchingTeacher = appState.config.teachers?.find((t) => t.pin === pin.trim());
+    if (matchingTeacher) {
+      setIsAdminLoggedIn(true);
+      setCurrentTeacher(matchingTeacher);
+      sessionStorage.setItem('is_admin_logged_in', 'true');
+      sessionStorage.setItem('current_teacher_account', JSON.stringify(matchingTeacher));
+      // Restrict activeSubject to this teacher's subject
+      setActiveSubject(matchingTeacher.subject);
+      localStorage.setItem('teacher_active_subject', matchingTeacher.subject);
+      return true;
+    }
+
+    // Default admin PIN (gives access to all)
     if (pin === appState.config.adminPin) {
       setIsAdminLoggedIn(true);
+      setCurrentTeacher(null);
       sessionStorage.setItem('is_admin_logged_in', 'true');
+      sessionStorage.removeItem('current_teacher_account');
       return true;
     }
     return false;
@@ -65,7 +102,25 @@ export default function App() {
 
   const handleLogout = () => {
     setIsAdminLoggedIn(false);
+    setCurrentTeacher(null);
     sessionStorage.removeItem('is_admin_logged_in');
+    sessionStorage.removeItem('current_teacher_account');
+  };
+
+  // Manager Auth Handlers
+  const handleManagerLogin = (pin: string): boolean => {
+    const validPin = appState.config.managerPin || '9876';
+    if (pin.trim() === validPin.trim()) {
+      setIsManagerLoggedIn(true);
+      sessionStorage.setItem('is_manager_logged_in', 'true');
+      return true;
+    }
+    return false;
+  };
+
+  const handleManagerLogout = () => {
+    setIsManagerLoggedIn(false);
+    sessionStorage.removeItem('is_manager_logged_in');
   };
 
   // Student Attendance Handler
@@ -341,6 +396,13 @@ export default function App() {
     }
   };
 
+  const handleUpdateStudents = (updatedStudents: StudentProfile[]) => {
+    setAppState((prev) => ({
+      ...prev,
+      students: updatedStudents,
+    }));
+  };
+
   return (
     <div className="min-h-screen bg-slate-50/70 text-slate-800 font-sans flex flex-col selection:bg-blue-100 selection:text-blue-900">
       <Navbar
@@ -350,6 +412,7 @@ export default function App() {
         currentTimeString={currentTime}
         currentDateString={currentDate}
         isAdminLoggedIn={isAdminLoggedIn}
+        isManagerLoggedIn={isManagerLoggedIn}
         activeSubject={activeSubject}
         onSelectActiveSubject={handleSelectActiveSubject}
       />
@@ -393,6 +456,22 @@ export default function App() {
             onUpdateExam={handleUpdateExam}
             onDeleteExam={handleDeleteExam}
             onGradeSubmission={handleGradeSubmission}
+          />
+        )}
+
+        {activeTab === 'manager' && (
+          <ManagerPanel
+            config={appState.config}
+            students={appState.students}
+            attendance={appState.attendance}
+            assignments={appState.assignments}
+            exams={appState.exams || []}
+            isManagerLoggedIn={isManagerLoggedIn}
+            onManagerLogin={handleManagerLogin}
+            onManagerLogout={handleManagerLogout}
+            onUpdateConfig={handleUpdateConfig}
+            onUpdateStudents={handleUpdateStudents}
+            onRestoreBackup={handleRestoreBackup}
           />
         )}
 
